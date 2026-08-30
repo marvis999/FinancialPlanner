@@ -3,19 +3,10 @@ services:
     build: .
     container_name: financial-planner
     ports:
-      # The start script runs `next start -p 3210`, so the app listens on 3210
-      # INSIDE the container too - the -p flag overrides any PORT env. Mapping
-      # to container port 3000 (as this file did for a year) forwarded traffic
-      # to a port nothing listened on.
-      #
-      # Bound to 127.0.0.1, not every interface: the app has no authentication,
-      # so a bare "3210:3210" hands the whole account history to anyone on the
-      # same network. Drop the host part only if you mean to serve other
-      # machines, and put a reverse proxy with a login in front when you do.
       - "127.0.0.1:3210:3210"
     volumes:
-      # Persist the SQLite database on the host so your data survives rebuilds.
       - ./data:/app/data
     environment:
       - DATA_DIR=/app/data
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
     restart: unless-stopped
