@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Light mode is "paper": a warm cream ground with slightly brighter cards
+     and warm-grey ink, instead of clinical blue-white. Dark mode is untouched. */
+  :root {
+    --background: 40 27% 94%;
+    --foreground: 30 12% 13%;
+    --card: 42 33% 97.5%;
+    --card-foreground: 30 12% 13%;
+    --popover: 42 33% 97.5%;
+    --popover-foreground: 30 12% 13%;
+    --primary: 30 14% 16%;
+    --primary-foreground: 40 30% 97%;
+    --secondary: 40 22% 89%;
+    --secondary-foreground: 30 14% 16%;
+    --muted: 40 22% 89%;
+    --muted-foreground: 30 8% 42%;
+    --accent: 40 22% 89%;
+    --accent-foreground: 30 14% 16%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 40 30% 97%;
+    --success: 142 71% 40%;
+    --success-foreground: 40 30% 97%;
+    --border: 38 18% 84%;
+    --input: 38 18% 84%;
+    --ring: 30 12% 13%;
+    --radius: 0.6rem;
+
+    --chart-1: 221 83% 53%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 0 84% 60%;
+    --chart-4: 47 96% 53%;
+    --chart-5: 280 65% 60%;
+
+    /* Spending categories — validated categorical palette (light steps). */
+    --cat-wohnen: #2a78d6;
+    --cat-shopping: #eb6834;
+    --cat-lebensmittel: #1baf7a;
+    --cat-tanken: #eda100;
+    --cat-telefon: #e87ba4;
+    --cat-bargeld: #008300;
+    --cat-versicherungen: #4a3aa7;
+    --cat-kredite: #e34948;
+    --cat-sonstiges: #898781;
+    /* Income is never budgeted; it only ever labels a positive booking. */
+    --cat-einkommen: #0d7d6f;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 222 47% 11%;
+    --success: 142 69% 58%;
+    --success-foreground: 144 61% 10%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 142 69% 58%;
+    --chart-3: 0 84% 60%;
+    --chart-4: 47 96% 53%;
+    --chart-5: 280 65% 70%;
+
+    /* Spending categories — same hues stepped for the dark surface. */
+    --cat-wohnen: #3987e5;
+    --cat-shopping: #d95926;
+    --cat-lebensmittel: #199e70;
+    --cat-tanken: #c98500;
+    --cat-telefon: #d55181;
+    --cat-bargeld: #008300;
+    --cat-versicherungen: #9085e9;
+    --cat-kredite: #e66767;
+    --cat-sonstiges: #898781;
+    --cat-einkommen: #3fbfad;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}

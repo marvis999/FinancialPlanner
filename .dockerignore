@@ -1,0 +1,20 @@
+node_modules
+.next
+data
+.git
+.claude
+.dockerignore
+Dockerfile
+docker-compose.yml
+README.md
+
+# Local env overrides must never be baked into the image: Next loads
+# .env.local at runtime, so a stray one would silently override the
+# DATA_DIR the compose file sets.
+.env
+.env.*.local
+.env.local
+
+# Test-only files; the runtime image never runs them.
+tests
+vitest.config.mts

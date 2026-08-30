@@ -1,0 +1,23 @@
+/node_modules
+.claude/
+/.next
+/out
+/build
+next-env.d.ts
+*.code-workspace
+
+# local SQLite database
+/data
+
+# misc
+*.log
+.DS_Store
+
+# Local environment. .env may hold CLAUDE_HOME (an absolute host path); the
+# example file is the one that belongs in the repo.
+.env
+.env*.local
+!.env.example
+
+# TypeScript incremental build cache (machine-local build artifact)
+tsconfig.tsbuildinfo

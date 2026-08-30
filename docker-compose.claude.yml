@@ -1,0 +1,19 @@
+# Opt-in overlay that enables the Claude features (import review, Analysis tab)
+# inside the container.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.claude.yml up --build
+#
+# This shares the host's Claude Code login with the container: the app spawns
+# `claude -p`, and the CLI reads its credentials from the mounted files. That is
+# why it is not in the base compose file - `docker compose up` should not wire
+# your credentials into a container without you asking for it.
+#
+# CLAUDE_HOME must point at the directory holding .claude and .claude.json.
+# Set it in a .env file next to this one (see .env.example): there is no single
+# environment variable for the home directory across Windows, macOS and Linux,
+# so naming it explicitly is the only portable option.
+services:
+  financial-planner:
+    volumes:
+      - ${CLAUDE_HOME:?set CLAUDE_HOME in .env - see .env.example}/.claude:/home/node/.claude
+      - ${CLAUDE_HOME}/.claude.json:/home/node/.claude.json

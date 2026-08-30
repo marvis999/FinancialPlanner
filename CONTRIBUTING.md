@@ -1,0 +1,1 @@
+If you would like to contribute please create an issue first so we can discuss your planned addition. You can of course fork this repo at any time if you would like to make it your own.
