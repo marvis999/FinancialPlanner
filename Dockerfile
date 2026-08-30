@@ -38,14 +38,21 @@ ENV PORT=3210
 # ~/.claude.json, mounted in by docker-compose — no API key in the image.
 RUN npm install -g @anthropic-ai/claude-code
 
+# --chown on the COPY, not a chown -R afterwards: changing ownership after the
+# fact rewrites every file into a new layer, so node_modules would be stored
+# twice (a 3.8 GB image, and 100 s of build spent walking it). Setting the owner
+# as the files land costs nothing.
 # node_modules already contains the compiled native module from the deps stage
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/.next ./.next
-COPY --from=build /app/public ./public
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/next.config.mjs ./next.config.mjs
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/.next ./.next
+COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/next.config.mjs ./next.config.mjs
 
-RUN mkdir -p /app/data && chown -R node:node /app
+# Only the two directories themselves: WORKDIR created /app as root, and the
+# app writes its SQLite files into /app/data. Not recursive - the COPYs above
+# already own everything under them.
+RUN mkdir -p /app/data && chown node:node /app /app/data
 USER node
 
 EXPOSE 3210
