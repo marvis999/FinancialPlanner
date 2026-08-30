@@ -80,12 +80,17 @@ export function runClaude(
       "--verbose",
       "--include-partial-messages",
       "--max-turns", "3",
+      "--tools", "",
+      "--strict-mcp-config",
     ];
     const child =
       process.platform === "win32"
         ? // Windows resolves the `claude` shim only through a shell; a single
-          // command string avoids DEP0190 (shell + args array).
-          spawn(["claude", ...args].join(" "), {
+          // command string avoids DEP0190 (shell + args array). Every argument
+          // is quoted because a bare join drops `--tools ""` entirely — an
+          // empty string contributes nothing between two spaces, and the flag
+          // would silently lose its value.
+          spawn(["claude", ...args].map((arg) => `"${arg}"`).join(" "), {
             shell: true,
             windowsHide: true,
             env: process.env,
