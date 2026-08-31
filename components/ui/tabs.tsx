@@ -44,7 +44,10 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-4 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      // mt-8, not the mt-4 shadcn ships: the panel now opens on a section
+      // heading sitting on the page background rather than a card edge, and at
+      // mt-4 that heading crowded the tab bar it belongs under.
+      "mt-8 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       className
     )}
     {...props}

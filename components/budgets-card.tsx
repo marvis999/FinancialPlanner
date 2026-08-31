@@ -257,7 +257,7 @@ export function BudgetsCard({
                     <div className="mb-1.5 flex items-baseline justify-between gap-3">
                       <span className="font-medium">{categoryLabel(budget.category)}</span>
                       <span className="text-muted-foreground">
-                        {formatDate(period.start)} – {formatDate(period.end)} ·{" "}
+                        {formatDate(period.start)} - {formatDate(period.end)} ·{" "}
                         {msg("dayOfPeriod", { elapsed: elapsedDays, total: totalDays })}
                       </span>
                     </div>
@@ -517,5 +517,5 @@ export function budgetsMonthLabel(
     }).format(new Date(`${refDate}T00:00:00`));
   }
   const period = budgetPeriodOf(refDate, startDay);
-  return `${formatDateIn(period.start, locale)} – ${formatDateIn(period.end, locale)}`;
+  return `${formatDateIn(period.start, locale)} - ${formatDateIn(period.end, locale)}`;
 }

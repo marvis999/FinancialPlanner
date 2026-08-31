@@ -29,6 +29,7 @@ import {
   type CsvImportResponse,
 } from "@/app/actions";
 import { AnalysisTab } from "@/components/analysis-tab";
+import { useCategorySuggestions } from "@/components/category-suggestions";
 import { BalanceChart } from "@/components/balance-chart";
 import { BrokeTraceDialog } from "@/components/broke-trace-dialog";
 import { BudgetsCard, budgetsMonthLabel } from "@/components/budgets-card";
@@ -51,10 +52,8 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
+import { SectionHeading } from "@/components/ui/section-heading";
 import {
   Dialog,
   DialogContent,
@@ -138,6 +137,15 @@ export function Dashboard({
     },
     [startTransition]
   );
+
+  const categorySuggestions = useCategorySuggestions({
+    disabled: isPending,
+    onApplyCategory: async (ids, expected, category) => {
+      const res = await applyCategorySuggestionAction(ids, expected, category);
+      setTransactions(res.transactions);
+      return { applied: res.applied, skipped: res.skipped };
+    },
+  });
 
   const handleImported = React.useCallback((res: CsvImportResponse) => {
     if (res.ok) {
@@ -406,164 +414,164 @@ export function Dashboard({
 
         {/* ---------------------------- Overview ---------------------------- */}
         <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-              <div>
-                <CardTitle>{msg("chartTitle")}</CardTitle>
-                <CardDescription>
-                  {hasHistory
-                    ? msg("chartWithHistory", {
-                        from: formatMonthLabel(
-                          transactions[transactions.length - 1].date
-                        ),
-                        months: state.settings.monthsAhead,
-                      })
-                    : msg("chartForecastOnly", {
-                        months: state.settings.monthsAhead,
-                        date: formatDate(anchorDate),
-                      })}
-                </CardDescription>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {msg("endingBalance")}{" "}
-                <span
-                  className={cn(
-                    "font-semibold tabular-nums",
-                    endingBalance < 0 ? "text-destructive" : "text-foreground"
-                  )}
-                >
-                  {formatEuro(endingBalance)}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <BalanceChart
-                data={series}
-                anchorTs={hasHistory ? tsOf(anchorDate) : undefined}
-                anchorLabel={msg("lastImportLabel", { date: formatDate(anchorDate) })}
-                todayTs={hasHistory ? tsOf(today) : undefined}
-              />
-              <p className="mt-3 text-xs text-muted-foreground">
-                {msg("chartHint")}
-                {avgNet !== null && (
-                  <>
-                    {msg("trendHint", { amount: formatEuro(avgNet) })}
-                  </>
-                )}
-                {hasHistory && avgNet === null && (
-                  <>
-                    {msg("trendTooShort")}
-                  </>
-                )}
-              </p>
-              {anchorIsStale && (
-                <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-                  <span className="font-medium">{msg("staleTitle")}</span>
-                  {msg("staleBody", {
+          <section>
+            <SectionHeading
+              title={msg("chartTitle")}
+              description={hasHistory
+                ? msg("chartWithHistory", {
+                    from: formatMonthLabel(
+                      transactions[transactions.length - 1].date
+                    ),
+                    months: state.settings.monthsAhead,
+                  })
+                : msg("chartForecastOnly", {
+                    months: state.settings.monthsAhead,
                     date: formatDate(anchorDate),
-                    days: anchorAgeDays,
                   })}
+              aside={
+                <div className="text-xs text-muted-foreground">
+                  {msg("endingBalance")}{" "}
+                  <span
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      endingBalance < 0 ? "text-destructive" : "text-foreground"
+                    )}
+                  >
+                    {formatEuro(endingBalance)}
+                  </span>
+                </div>
+              }
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <BalanceChart
+                  data={series}
+                  anchorTs={hasHistory ? tsOf(anchorDate) : undefined}
+                  anchorLabel={msg("lastImportLabel", { date: formatDate(anchorDate) })}
+                  todayTs={hasHistory ? tsOf(today) : undefined}
+                />
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {msg("chartHint")}
+                  {avgNet !== null && (
+                    <>
+                      {msg("trendHint", { amount: formatEuro(avgNet) })}
+                    </>
+                  )}
+                  {hasHistory && avgNet === null && (
+                    <>
+                      {msg("trendTooShort")}
+                    </>
+                  )}
                 </p>
-              )}
-              {showDivergence && (
-                <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
-                  <span className="font-medium">{msg("realityTitle")}</span>
-                  {msg("realityPlanned")}
-                  <strong>
-                    {msg("perMonthAmount", { amount: formatEuro(summary.monthlyNet) })}
-                  </strong>
-                  {msg("realityActual")}
-                  <strong>
-                    {msg("perMonthAmount", { amount: formatEuro(avgNet ?? 0) })}
-                  </strong>
-                  .{" "}
-                  {summary.monthlyNet > (avgNet ?? 0)
-                    ? msg("missingExpenses")
-                    : msg("missingIncome")}
-                </p>
-              )}
-              {brokePoint && (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  <p>
-                    {msg("goesNegative")}
-                    <strong>{formatDate(brokePoint.date)}</strong>
-                    {msg("goesNegativeTail", {
-                      amount: formatEuro(brokePoint.balance),
+                {anchorIsStale && (
+                  <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                    <span className="font-medium">{msg("staleTitle")}</span>
+                    {msg("staleBody", {
+                      date: formatDate(anchorDate),
+                      days: anchorAgeDays,
                     })}
                   </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setShowBrokeTrace(true)}
-                  >
-                    {msg("showCalculation")}
-                  </Button>
-                </div>
-              )}
-              {/* Mounted only while open (see the dialog note below). */}
-              {showBrokeTrace && brokePoint && (
-                <BrokeTraceDialog
-                  forecast={forecast}
-                  brokeDate={brokePoint.date}
-                  anchorDate={anchorDate}
-                  startBalance={state.settings.startingBalance}
-                  excludedCount={excludedOneOffs.size}
-                  onClose={() => setShowBrokeTrace(false)}
+                )}
+                {showDivergence && (
+                  <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+                    <span className="font-medium">{msg("realityTitle")}</span>
+                    {msg("realityPlanned")}
+                    <strong>
+                      {msg("perMonthAmount", { amount: formatEuro(summary.monthlyNet) })}
+                    </strong>
+                    {msg("realityActual")}
+                    <strong>
+                      {msg("perMonthAmount", { amount: formatEuro(avgNet ?? 0) })}
+                    </strong>
+                    .{" "}
+                    {summary.monthlyNet > (avgNet ?? 0)
+                      ? msg("missingExpenses")
+                      : msg("missingIncome")}
+                  </p>
+                )}
+                {brokePoint && (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    <p>
+                      {msg("goesNegative")}
+                      <strong>{formatDate(brokePoint.date)}</strong>
+                      {msg("goesNegativeTail", {
+                        amount: formatEuro(brokePoint.balance),
+                      })}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setShowBrokeTrace(true)}
+                    >
+                      {msg("showCalculation")}
+                    </Button>
+                  </div>
+                )}
+                {/* Mounted only while open (see the dialog note below). */}
+                {showBrokeTrace && brokePoint && (
+                  <BrokeTraceDialog
+                    forecast={forecast}
+                    brokeDate={brokePoint.date}
+                    anchorDate={anchorDate}
+                    startBalance={state.settings.startingBalance}
+                    excludedCount={excludedOneOffs.size}
+                    onClose={() => setShowBrokeTrace(false)}
+                  />
+                )}
+                {/* Paused items are already out of the forecast; the panel only
+                    offers the view-only toggle for the ones that are in it. */}
+                <OneOffTogglePanel
+                  items={state.oneoff.filter((oneOff) => oneOff.isActive)}
+                  excluded={excludedOneOffs}
+                  onToggle={toggleOneOff}
                 />
-              )}
-              {/* Paused items are already out of the forecast; the panel only
-                  offers the view-only toggle for the ones that are in it. */}
-              <OneOffTogglePanel
-                items={state.oneoff.filter((oneOff) => oneOff.isActive)}
-                excluded={excludedOneOffs}
-                onToggle={toggleOneOff}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{msg("budgetsTitle")}</CardTitle>
-              <CardDescription>
-                {msg("budgetsDescription", {
-                  period: budgetsMonthLabel(
-                    transactions,
-                    state.settings.budgetStartDay,
-                    locale
-                  ),
-                })}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BudgetsCard
-                budgets={state.budgets}
-                transactions={transactions}
-                startDay={state.settings.budgetStartDay}
-                disabled={isPending}
-                onAdd={(category, amount) =>
-                  run(() => addBudgetAction({ category, amount }))
-                }
-                onUpdate={(id, amount) =>
-                  run(() => updateBudgetAction({ id, amount }))
-                }
-                onDelete={(id) => run(() => deleteBudgetAction(id))}
-              />
-            </CardContent>
-          </Card>
-
-          {hasHistory && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{msg("spendingTitle")}</CardTitle>
-                <CardDescription>
-                  {msg("spendingDescription")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SpendingPie transactions={transactions} />
               </CardContent>
             </Card>
+          </section>
+
+          <section>
+            <SectionHeading
+              title={msg("budgetsTitle")}
+              description={msg("budgetsDescription", {
+                period: budgetsMonthLabel(
+                  transactions,
+                  state.settings.budgetStartDay,
+                  locale
+                ),
+              })}
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <BudgetsCard
+                  budgets={state.budgets}
+                  transactions={transactions}
+                  startDay={state.settings.budgetStartDay}
+                  disabled={isPending}
+                  onAdd={(category, amount) =>
+                    run(() => addBudgetAction({ category, amount }))
+                  }
+                  onUpdate={(id, amount) =>
+                    run(() => updateBudgetAction({ id, amount }))
+                  }
+                  onDelete={(id) => run(() => deleteBudgetAction(id))}
+                />
+              </CardContent>
+            </Card>
+          </section>
+
+          {hasHistory && (
+            <section>
+              <SectionHeading
+                title={msg("spendingTitle")}
+                description={msg("spendingDescription")}
+              />
+              <Card>
+                <CardContent className="pt-6">
+                  <SpendingPie transactions={transactions} />
+                </CardContent>
+              </Card>
+            </section>
           )}
 
           <SettingsCard
@@ -576,219 +584,217 @@ export function Dashboard({
 
         {/* ------------------------- Recurring ------------------------------ */}
         <TabsContent value="monthly" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{msg("addRecurringTitle")}</CardTitle>
-              <CardDescription>
-                {msg("addRecurringDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <EntryForm
-                variant="recurring"
-                initial={recurringInit}
-                submitLabel={msgCommon("add")}
-                disabled={isPending}
-                resetAfterSubmit
-                idPrefix="rec-add"
-                onSubmit={(values) => run(() => addRecurringAction(values))}
-              />
-            </CardContent>
-          </Card>
+          <section>
+            <SectionHeading
+              title={msg("addRecurringTitle")}
+              description={msg("addRecurringDescription")}
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <EntryForm
+                  variant="recurring"
+                  initial={recurringInit}
+                  submitLabel={msgCommon("add")}
+                  disabled={isPending}
+                  resetAfterSubmit
+                  idPrefix="rec-add"
+                  onSubmit={(values) => run(() => addRecurringAction(values))}
+                />
+              </CardContent>
+            </Card>
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{msg("recurringTitle")}</CardTitle>
-              <CardDescription>
-                {msg("recurringAverage")}
-                <MonthlyNetHover items={activeRecurring} budgets={state.budgets}>
-                  {formatEuro(summary.monthlyNet)}
-                </MonthlyNetHover>
-                {msg("recurringPausedNote")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ItemTable
-                empty={msg("recurringEmpty")}
-                rows={state.recurring.map((item) => ({
-                  id: item.id,
-                  name: item.name,
-                  kind: item.kind,
-                  amount: item.amount,
-                  date: item.date,
-                  intervalMonths: item.intervalMonths,
-                  isContract: item.isContract,
-                  // Without the one-off list, matching the walk the chart and
-                  // the payoff card use: a designated payment is a planned
-                  // booking applied on its due day, not something already
-                  // deducted from the balance shown here.
-                  remainingAmount: effectiveRemaining(item, anchorDate),
-                  endDate: item.endDate,
-                  isActive: item.isActive,
-                  category: item.category,
-                }))}
-                payoffs={payoffs}
-                onDelete={(row) =>
-                  setDeleting({ variant: "recurring", id: row.id, name: row.name })
-                }
-                onEdit={(row) => openEdit("recurring", row)}
-                onToggleActive={(row, active) =>
-                  run(() => toggleRecurringActiveAction(row.id, active))
-                }
-                disabled={isPending}
-                showDate
-                showInterval
-                totals={{
-                  income: summary.monthlyIncome,
-                  expense: summary.monthlyExpense,
-                }}
-                totalsCell={
+          <section>
+            <SectionHeading
+              title={msg("recurringTitle")}
+              description={
+                <>
+
+                  {msg("recurringAverage")}
                   <MonthlyNetHover items={activeRecurring} budgets={state.budgets}>
                     {formatEuro(summary.monthlyNet)}
                   </MonthlyNetHover>
-                }
-              />
-            </CardContent>
-          </Card>
+                  {msg("recurringPausedNote")}
+                </>
+              }
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <ItemTable
+                  empty={msg("recurringEmpty")}
+                  rows={state.recurring.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    kind: item.kind,
+                    amount: item.amount,
+                    date: item.date,
+                    intervalMonths: item.intervalMonths,
+                    isContract: item.isContract,
+                    // Without the one-off list, matching the walk the chart and
+                    // the payoff card use: a designated payment is a planned
+                    // booking applied on its due day, not something already
+                    // deducted from the balance shown here.
+                    remainingAmount: effectiveRemaining(item, anchorDate),
+                    endDate: item.endDate,
+                    isActive: item.isActive,
+                    category: item.category,
+                  }))}
+                  payoffs={payoffs}
+                  onDelete={(row) =>
+                    setDeleting({ variant: "recurring", id: row.id, name: row.name })
+                  }
+                  onEdit={(row) => openEdit("recurring", row)}
+                  onToggleActive={(row, active) =>
+                    run(() => toggleRecurringActiveAction(row.id, active))
+                  }
+                  disabled={isPending}
+                  showDate
+                  showInterval
+                  totals={{
+                    income: summary.monthlyIncome,
+                    expense: summary.monthlyExpense,
+                  }}
+                  totalsCell={
+                    <MonthlyNetHover items={activeRecurring} budgets={state.budgets}>
+                      {formatEuro(summary.monthlyNet)}
+                    </MonthlyNetHover>
+                  }
+                />
+              </CardContent>
+            </Card>
+          </section>
         </TabsContent>
 
         {/* -------------------------- One-off ------------------------------- */}
         <TabsContent value="oneoff" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{msg("addOneOffTitle")}</CardTitle>
-              <CardDescription>
-                {msg("addOneOffDescription")}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <EntryForm
-                variant="oneoff"
-                initial={oneoffInit}
-                submitLabel={msgCommon("add")}
-                disabled={isPending}
-                resetAfterSubmit
-                idPrefix="one-add"
-                debtOptions={debtOptions}
-                getDebtRemaining={getDebtRemaining}
-                onSubmit={(values) =>
-                  run(() =>
-                    addOneOffAction({
-                      name: values.name,
-                      amount: values.amount,
-                      kind: values.kind,
-                      date: values.date,
-                      isContract: values.isContract,
-                      debtId: values.debtId,
-                    })
-                  )
-                }
-              />
-            </CardContent>
-          </Card>
+          <section>
+            <SectionHeading
+              title={msg("addOneOffTitle")}
+              description={msg("addOneOffDescription")}
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <EntryForm
+                  variant="oneoff"
+                  initial={oneoffInit}
+                  submitLabel={msgCommon("add")}
+                  disabled={isPending}
+                  resetAfterSubmit
+                  idPrefix="one-add"
+                  debtOptions={debtOptions}
+                  getDebtRemaining={getDebtRemaining}
+                  onSubmit={(values) =>
+                    run(() =>
+                      addOneOffAction({
+                        name: values.name,
+                        amount: values.amount,
+                        kind: values.kind,
+                        date: values.date,
+                        isContract: values.isContract,
+                        debtId: values.debtId,
+                      })
+                    )
+                  }
+                />
+              </CardContent>
+            </Card>
+          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{msg("oneOffTitle")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ItemTable
-                empty={msg("oneOffEmpty")}
-                rows={state.oneoff.map((item) => ({
-                  id: item.id,
-                  name: item.name,
-                  kind: item.kind,
-                  amount: item.amount,
-                  date: item.date,
-                  isContract: item.isContract,
-                  isActive: item.isActive,
-                  debtId: item.debtId,
-                  debtLabel:
-                    item.debtId !== null
-                      ? state.recurring.find((recurring) => recurring.id === item.debtId)?.name ??
-                        null
-                      : null,
-                }))}
-                onDelete={(row) =>
-                  setDeleting({ variant: "oneoff", id: row.id, name: row.name })
-                }
-                onEdit={(row) => openEdit("oneoff", row)}
-                onToggleActive={(row, active) =>
-                  run(() => toggleOneOffActiveAction(row.id, active))
-                }
-                disabled={isPending}
-                showDate
-              />
-            </CardContent>
-          </Card>
+          <section>
+            <SectionHeading
+              title={msg("oneOffTitle")}
+            />
+            <Card>
+              <CardContent className="pt-6">
+                <ItemTable
+                  empty={msg("oneOffEmpty")}
+                  rows={state.oneoff.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    kind: item.kind,
+                    amount: item.amount,
+                    date: item.date,
+                    isContract: item.isContract,
+                    isActive: item.isActive,
+                    debtId: item.debtId,
+                    debtLabel:
+                      item.debtId !== null
+                        ? state.recurring.find((recurring) => recurring.id === item.debtId)?.name ??
+                          null
+                        : null,
+                  }))}
+                  onDelete={(row) =>
+                    setDeleting({ variant: "oneoff", id: row.id, name: row.name })
+                  }
+                  onEdit={(row) => openEdit("oneoff", row)}
+                  onToggleActive={(row, active) =>
+                    run(() => toggleOneOffActiveAction(row.id, active))
+                  }
+                  disabled={isPending}
+                  showDate
+                />
+              </CardContent>
+            </Card>
+          </section>
         </TabsContent>
 
         {/* --------------------------- Transactions ------------------------- */}
         <TabsContent value="transactions" className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-              <div>
-                <CardTitle>{msg("transactionsTitle")}</CardTitle>
-                <CardDescription>
-                  {transactions.length > 0
-                    ? msg("transactionsCount", {
-                        count: transactions.length,
-                        from: formatDate(
-                          transactions[transactions.length - 1].date
-                        ),
-                        to: formatDate(transactions[0].date),
+          <section>
+            <SectionHeading
+              title={msg("transactionsTitle")}
+              description={transactions.length > 0
+                ? msg("transactionsCount", {
+                    count: transactions.length,
+                    from: formatDate(
+                      transactions[transactions.length - 1].date
+                    ),
+                    to: formatDate(transactions[0].date),
+                  })
+                : msg("transactionsEmpty")}
+              aside={
+                <CsvUpload onImported={handleImported} />
+              }
+            />
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                {categorySuggestions.panel}
+                {transactions.length > 0 ? (
+                  <TransactionsTable
+                    action={categorySuggestions.trigger}
+                    transactions={transactions}
+                    onAssignCategory={(ids, category) =>
+                      startTransition(async () => {
+                        const res = await setTransactionCategoryAction(ids, category);
+                        setTransactions(res.transactions);
                       })
-                    : msg("transactionsEmpty")}
-                </CardDescription>
-              </div>
-              <CsvUpload onImported={handleImported} />
-            </CardHeader>
-            <CardContent>
-              {transactions.length > 0 ? (
-                <TransactionsTable
-                  transactions={transactions}
-                  onAssignCategory={(ids, category) =>
-                    startTransition(async () => {
-                      const res = await setTransactionCategoryAction(ids, category);
-                      setTransactions(res.transactions);
-                    })
-                  }
-                  onAddTag={(ids, tag) =>
-                    startTransition(async () => {
-                      const res = await addTransactionTagAction(ids, tag);
-                      setTransactions(res.transactions);
-                    })
-                  }
-                  onRemoveTag={(ids, tag) =>
-                    startTransition(async () => {
-                      const res = await removeTransactionTagAction(ids, tag);
-                      setTransactions(res.transactions);
-                    })
-                  }
-                />
-              ) : (
-                <div className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
-                  {msg("noImportedData")}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    }
+                    onAddTag={(ids, tag) =>
+                      startTransition(async () => {
+                        const res = await addTransactionTagAction(ids, tag);
+                        setTransactions(res.transactions);
+                      })
+                    }
+                    onRemoveTag={(ids, tag) =>
+                      startTransition(async () => {
+                        const res = await removeTransactionTagAction(ids, tag);
+                        setTransactions(res.transactions);
+                      })
+                    }
+                  />
+                ) : (
+                  <div className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+                    {msg("noImportedData")}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </section>
         </TabsContent>
 
         {/* --------------------------- Claude analysis ---------------------- */}
         <TabsContent value="analysis" className="space-y-6">
-          <AnalysisTab
-            disabled={isPending}
-            onApplyCategory={async (ids, expected, category) => {
-              const res = await applyCategorySuggestionAction(
-                ids,
-                expected,
-                category
-              );
-              setTransactions(res.transactions);
-              return { applied: res.applied, skipped: res.skipped };
-            }}
-          />
+          <AnalysisTab disabled={isPending} />
         </TabsContent>
       </Tabs>
 

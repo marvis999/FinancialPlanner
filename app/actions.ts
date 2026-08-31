@@ -813,7 +813,7 @@ ${catalog}
 
 Below are merchant groups (one JSON object per line) with their currently assigned category. Many sit on "sonstiges" because no keyword matched; some are misfiled through keyword collisions (e.g. pharmacies in "bargeld", money transfers in "kredite").
 
-Suggest a category ONLY where it differs from the current one and you are confident. Leave out groups whose category is right or unclear. Restaurants/fast food, parking, leisure, public offices and the like with no fitting category stay "sonstiges" — unless another one clearly applies.
+Suggest a category ONLY where it differs from the current one and you are confident. Leave out groups whose category is right or unclear. Restaurants/fast food, parking, leisure, public offices and the like with no fitting category stay "sonstiges", unless another one clearly applies.
 
 Answer with a JSON array ONLY, with no explanatory text before or after:
 [{"id": "g12", "category": "<category-key>", "reason": "<short reason in ${answerLanguage}, max. 12 words>"}]

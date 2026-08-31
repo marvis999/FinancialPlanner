@@ -122,7 +122,10 @@ export function TransactionsTable({
   onAssignCategory,
   onAddTag,
   onRemoveTag,
+  action,
 }: {
+  /** Rendered in the filter toolbar, after the tag filter. */
+  action?: React.ReactNode;
   transactions: TransactionItem[];
   onAssignCategory?: (ids: number[], category: string | null) => void;
   onAddTag?: (ids: number[], tag: string) => void;
@@ -474,6 +477,7 @@ export function TransactionsTable({
               }
             />
           )}
+          {action}
         </div>
         <div className="flex items-center justify-between gap-2">
           <CheckboxDropdown
