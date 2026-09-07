@@ -750,6 +750,47 @@ describe("budgets cap their category instead of adding to it (D1)", () => {
     expect(rest(-300.07)).toMatchObject({ date: "2026-08-31", amount: -400 });
   });
 
+  it("the anchor period nets a non-monthly item it has not charged yet (C3)", () => {
+    // Quarterly 300 under a 100 budget: the premium falls after the anchor, so
+    // it is in neither budgetSpent nor the monthly bucket. Skipping the whole
+    // equivalent map for period 0 booked it in full AND the full 100 rest.
+    const state = st(
+      [rec({ name: "Police", amount: 300, intervalMonths: 3, date: "2026-09-20", category: "versicherungen" })],
+      [],
+      [{ id: 1, category: "versicherungen", amount: 100 }],
+      { ...SETTINGS, monthsAhead: 6 }
+    );
+    const points = computeDailyProjection(state, {
+      anchorDate: "2026-09-05",
+      budgetSpent: new Map(),
+    });
+    const sep = flatEvents(points).filter((e) => e.date <= "2026-09-30");
+    expect(sep.reduce((total, e) => total + e.amount, 0)).toBe(-300);
+    // The rest is fully covered by the premium, so nothing is booked for it.
+    expect(sep.filter((e) => e.name.startsWith("Budget"))).toEqual([]);
+  });
+
+  it("but still leaves out one already charged inside the anchor period (C3)", () => {
+    // Same premium, debited on the 2nd - before the anchor, so it is already
+    // in budgetSpent. Netting the equivalent as well would subtract it twice.
+    const state = st(
+      [rec({ name: "Police", amount: 300, intervalMonths: 3, date: "2026-09-02", category: "versicherungen" })],
+      [],
+      [{ id: 1, category: "versicherungen", amount: 400 }],
+      { ...SETTINGS, monthsAhead: 6 }
+    );
+    const points = computeDailyProjection(state, {
+      anchorDate: "2026-09-05",
+      budgetSpent: new Map([["versicherungen", 300]]),
+    });
+    const sep = flatEvents(points).filter((e) => e.date <= "2026-09-30");
+    // 400 limit - 300 really spent = 100 rest; the equivalent is NOT taken off
+    // a second time, which would have left only 0.
+    expect(sep).toEqual([
+      { date: "2026-09-30", name: "Budget: Versicherungen", amount: -100 },
+    ]);
+  });
+
   it("exposes the live items and the netted budgets for the breakdown", () => {
     const cost = computeMonthlyCost(
       st(

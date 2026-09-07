@@ -82,6 +82,12 @@ function nextDayIso(iso: string): string {
   return m < 12 ? isoOf(y, m + 1, 1) : isoOf(y + 1, 1, 1);
 }
 
+function prevDayIso(iso: string): string {
+  const { y, m, d } = parseIso(iso);
+  if (d > 1) return isoOf(y, m, d - 1);
+  return m > 1 ? isoOf(y, m - 1, daysInMonth(y, m - 1)) : isoOf(y - 1, 12, 31);
+}
+
 /** Local-midnight timestamp for an ISO day (for the numeric chart axis). */
 export function tsOf(iso: string): number {
   return new Date(`${iso}T00:00:00`).getTime();
@@ -213,6 +219,22 @@ function* occurrencesAfter(
     if (due > anchor) yield due;
     step++;
   }
+}
+
+/**
+ * Does this item fall due at any point in `[from, to]`? Used to tell an item
+ * already charged inside the anchor period from one still ahead of it, which
+ * decides whether its cost is in `budgetSpent` already or has yet to be netted.
+ */
+function paysBetween(recurring: RecurringItem, from: string, to: string): boolean {
+  if (from > to) return false;
+  // occurrencesAfter yields strictly after its anchor, so step back a day to
+  // keep `from` itself in range: a rent due on the 1st of the period counts.
+  for (const due of occurrencesAfter(recurring, prevDayIso(from))) {
+    if (recurring.endDate && due > recurring.endDate) return false;
+    return due <= to;
+  }
+  return false;
 }
 
 /** One-off expenses designated to pay down the given recurring debt.
@@ -520,16 +542,32 @@ export function computeDailyProjection(
   // Items charged less often than monthly are netted at their monthly
   // equivalent instead - the same quantity computeSummary uses - so a yearly
   // 600 EUR policy under a 100 EUR budget does not lose 500 EUR to the clamp.
+  //
+  // The anchor period keeps its own tally. Its real spending is already in
+  // budgetSpent, so an item charged earlier in that period must NOT be netted
+  // again - but one still ahead of the anchor is in neither term, and skipping
+  // the whole map for period 0 booked it in full AND left the limit's rest
+  // untouched: a quarterly 300 EUR premium under a 100 EUR budget came out at
+  // 400 EUR in the anchor period and 300 EUR in every period after it.
+  const anchorPeriod = budgetPeriodOf(anchor, startDay);
   const fixedEqByCategory = new Map<string, number>();
+  const fixedEqAnchorPeriod = new Map<string, number>();
   for (const recurring of state.recurring) {
     if (recurring.kind !== "expense" || (recurring.intervalMonths || 1) === 1) continue;
     if (!isLiveOn(recurring, anchor)) continue;
     const key = recurringCategory(recurring);
     if (!key) continue;
+    const equivalent = monthlyEquivalent(recurring);
     fixedEqByCategory.set(
       key,
-      round2((fixedEqByCategory.get(key) ?? 0) + monthlyEquivalent(recurring))
+      round2((fixedEqByCategory.get(key) ?? 0) + equivalent)
     );
+    if (!paysBetween(recurring, anchorPeriod.start, anchor)) {
+      fixedEqAnchorPeriod.set(
+        key,
+        round2((fixedEqAnchorPeriod.get(key) ?? 0) + equivalent)
+      );
+    }
   }
 
   // What each designated one-off really pays, taken from the debt walk below,
@@ -580,19 +618,22 @@ export function computeDailyProjection(
   // instead of being silently dropped.
   for (const budget of state.budgets) {
     const label = `Budget: ${categoryByKey(budget.category).label}`;
-    const anchorPeriodStart = budgetPeriodOf(anchor, startDay).start;
     for (let periodIndex = 0; ; periodIndex++) {
-      const periodStart = addMonthsClamped(anchorPeriodStart, periodIndex);
+      const periodStart = addMonthsClamped(anchorPeriod.start, periodIndex);
       const periodEnd = budgetPeriodOf(periodStart, startDay).end;
       const due = periodEnd > anchor ? periodEnd : nextDayIso(anchor);
       if (due > end) break;
       // The anchor period's real spending is already in budgetSpent; adding a
       // monthly equivalent on top of it would subtract the same money twice.
+      // Which is why the anchor period nets only the non-monthly items it has
+      // NOT charged yet - those cannot be in budgetSpent.
       const alreadySpent =
         periodIndex === 0 ? opts.budgetSpent?.get(budget.category) ?? 0 : 0;
       const fixed =
         (fixedByCatPeriod.get(`${budget.category}|${periodStart}`) ?? 0) +
-        (periodIndex === 0 ? 0 : fixedEqByCategory.get(budget.category) ?? 0);
+        (periodIndex === 0
+          ? fixedEqAnchorPeriod.get(budget.category) ?? 0
+          : fixedEqByCategory.get(budget.category) ?? 0);
       const rest = round2(
         Math.max(0, budget.amount - Math.max(0, alreadySpent) - fixed)
       );
