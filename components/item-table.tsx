@@ -40,6 +40,8 @@ export interface Row {
   debtLabel?: string | null;
   /** Recurring rows: budget category, null = covered by no budget. */
   category?: string | null;
+  /** Recurring rows: where the item stands right now (booked, due, open). */
+  statusLine?: React.ReactNode;
 }
 
 export function ItemTable({
@@ -161,6 +163,7 @@ export function ItemTable({
                         </span>
                       </div>
                     )}
+                    {row.statusLine}
                   </div>
                 </div>
               </TableCell>

@@ -203,7 +203,7 @@ export function computeSummary(state: AppState, asOf?: string): Summary {
 /* ------------------------------------------------------------------------- */
 
 /** Due dates of a recurring item strictly after `anchor`, in order. */
-function* occurrencesAfter(
+export function* occurrencesAfter(
   recurring: RecurringItem,
   anchor: string
 ): Generator<string> {

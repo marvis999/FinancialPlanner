@@ -10,7 +10,7 @@ import {
   updateJobResult,
   type Job,
 } from "@/lib/analysis-jobs";
-import { ALL_CATEGORIES, categoryByKey, effectiveCategory } from "@/lib/categories";
+import { ALL_CATEGORIES, categorize, categoryByKey, effectiveCategory } from "@/lib/categories";
 import {
   CLAUDE_MODEL,
   extractJsonArray,
@@ -27,6 +27,12 @@ import { isLocale, type Locale } from "@/lib/locale";
 import { activeLocale, setActiveLocale } from "@/lib/locale-store";
 import { clampBudgetStartDay } from "@/lib/period";
 import { effectiveRemaining } from "@/lib/projection";
+import {
+  matchRecurring,
+  settledDues,
+  settledKey,
+  type MatchCandidate,
+} from "@/lib/recurring-match";
 import { todayIso } from "@/lib/utils";
 import { looksLikeUmsatzCsv, parseCsvTransactions } from "@/lib/csv-import";
 import type {
@@ -40,6 +46,8 @@ import type {
   ImportCheckState,
   ImportResult,
   ImportReviewDecision,
+  ImportSkippedDue,
+  ImportSummary,
   ImportTransaction,
   Kind,
   MonthlyBalance,
@@ -390,8 +398,13 @@ export interface CsvImportResponse {
    * first. Re-call with `closingBalance` to go ahead.
    */
   needsBalance?: BalancePrompt;
-  /** What the accepted Claude suggestions changed alongside the import. */
-  review?: { categoriesApplied: number; oneOffsResolved: number };
+  /** What the accepted review decisions changed alongside the import. */
+  review?: {
+    categoriesApplied: number;
+    oneOffsResolved: number;
+    recurringLinked: number;
+    duesSkipped: number;
+  };
   state: AppState;
   history: MonthlyBalance[];
   transactions: TransactionItem[];
@@ -498,6 +511,77 @@ export interface CsvCheckStartResponse {
   nothingNew?: boolean;
   /** The check job is running; poll getCsvCheckStateAction for progress. */
   started?: boolean;
+  /**
+   * What the file contains and what the matcher settled, computed before the
+   * model runs: the review shows this whether or not the check succeeds.
+   */
+  summary?: ImportSummary;
+}
+
+/**
+ * The deterministic part of the review: every new booking, the recurring
+ * due dates the matcher settled from them, and the due dates it could not.
+ */
+function buildImportSummary(
+  fresh: ImportTransaction[],
+  duplicates: number,
+  invalid: number
+): ImportSummary {
+  const items = db.listRecurring();
+  const candidates: MatchCandidate[] = fresh.map((record) => ({
+    key: record.fingerprint,
+    date: record.date,
+    name: record.name,
+    purpose: record.purpose,
+    amount: record.amount,
+    iban: record.iban,
+  }));
+  const { matches, expected } = matchRecurring(
+    items,
+    candidates,
+    settledDues(db.listTransactions())
+  );
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const dates = fresh.map((record) => record.date).sort();
+  const newestFirst = [...fresh].sort((a, b) =>
+    a.date < b.date ? 1 : a.date > b.date ? -1 : 0
+  );
+  return {
+    bookings: newestFirst.map((record) => ({
+      fingerprint: record.fingerprint,
+      date: record.date,
+      name: record.name,
+      amount: Math.round(record.amount * 100) / 100,
+      purpose: record.purpose,
+      category: categorize(record),
+    })),
+    duplicates,
+    invalid,
+    minDate: dates[0] ?? "",
+    maxDate: dates[dates.length - 1] ?? "",
+    recurringMatches: matches.flatMap((match) => {
+      const item = byId.get(match.recurringId);
+      return item
+        ? [
+            {
+              fingerprint: match.key,
+              recurringId: item.id,
+              name: item.name,
+              amount: item.amount,
+              kind: item.kind,
+              due: match.due,
+              confidence: match.confidence,
+            },
+          ]
+        : [];
+    }),
+    expected: expected.flatMap((due) => {
+      const item = byId.get(due.recurringId);
+      return item
+        ? [{ recurringId: item.id, name: item.name, amount: item.amount, kind: item.kind, due: due.due }]
+        : [];
+    }),
+  };
 }
 
 /**
@@ -520,7 +604,8 @@ export async function startCsvCheckAction(
 
   const existing = db.existingFingerprints(prep.records.map((record) => record.fingerprint));
   const fresh = prep.records.filter((record) => !existing.has(record.fingerprint));
-  if (!fresh.length) return { ok: true, nothingNew: true };
+  const summary = buildImportSummary(fresh, prep.records.length - fresh.length, prep.invalid);
+  if (!fresh.length) return { ok: true, nothingNew: true, summary };
 
   if (getJob(IMPORT_CHECK_JOB)?.status === "running") {
     return { ok: false, error: msg("checkAlreadyRunning") };
@@ -529,6 +614,7 @@ export async function startCsvCheckAction(
 
   const payments = toCheckPayments(fresh);
   const oneoffs = db.listOneOff();
+  const taken = new Set(summary.recurringMatches.map((match) => match.fingerprint));
   startJob<ImportCheckResult>(IMPORT_CHECK_JOB, {}, async (progress) => {
     progress(
       msg("newBookings", { count: fresh.length }) +
@@ -537,12 +623,16 @@ export async function startCsvCheckAction(
           : "") +
         (oneoffs.length
           ? msg("matchedAgainst", { count: oneoffs.length })
+          : "") +
+        (summary.expected.length
+          ? msg("expectedDues", { count: summary.expected.length })
           : "")
     );
     const prompt = buildImportCheckPrompt(
       payments,
       oneoffs,
-      msg("answerLanguage")
+      msg("answerLanguage"),
+      summary.expected
     );
     progress(msg("startingClaude", { model: CLAUDE_MODEL }));
     const run = await runClaude(prompt, {
@@ -553,7 +643,13 @@ export async function startCsvCheckAction(
     progress(msg("parsingAnswer"));
     const parsed = extractJsonArray(run.text);
     if (!parsed) throw new Error(msg("noJson"));
-    const findings = parseImportCheckAnswer(parsed, payments, oneoffs);
+    const findings = parseImportCheckAnswer(
+      parsed,
+      payments,
+      oneoffs,
+      summary.expected,
+      taken
+    );
     progress(
       findings.length
         ? msg("findingsFound", { count: findings.length })
@@ -561,7 +657,7 @@ export async function startCsvCheckAction(
     );
     return { newCount: fresh.length, checked: payments.length, findings };
   });
-  return { ok: true, started: true };
+  return { ok: true, started: true, summary };
 }
 
 /** Snapshot of the pre-import check job, polled by the upload component. */
@@ -589,7 +685,8 @@ export async function cancelCsvCheckAction(): Promise<void> {
 export async function confirmCsvImportAction(
   text: string,
   closingBalance: number | null,
-  decisions: ImportReviewDecision[]
+  decisions: ImportReviewDecision[],
+  skippedDues: ImportSkippedDue[] = []
 ): Promise<CsvImportResponse> {
   // Captured here, not inside the job: the job runs after this action has
   // returned, when there is no request left to resolve a locale from.
@@ -667,13 +764,110 @@ export async function confirmCsvImportAction(
     oneOffsResolved++;
   }
 
+  // Accepted recurring matches link the freshly inserted rows to the due
+  // dates they settle; the item learns its counterparty from the first link.
+  // A due date the ledger already settled is left alone, and each one is
+  // linked at most once however often the decisions name it.
+  const items = new Map(db.listRecurring().map((item) => [item.id, item]));
+  const settled = settledDues(db.listTransactions());
+  const links: Array<{ transactionId: number; recurringId: number; due: string }> = [];
+  for (const decision of valid) {
+    const recurringId = decision.recurringId;
+    const due = decision.recurringDue;
+    if (
+      typeof recurringId !== "number" ||
+      !Number.isInteger(recurringId) ||
+      !items.has(recurringId) ||
+      typeof due !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(due)
+    )
+      continue;
+    const key = settledKey(recurringId, due);
+    const id = ids.get(decision.fingerprint);
+    if (id === undefined || settled.has(key)) continue;
+    settled.add(key);
+    links.push({ transactionId: id, recurringId, due });
+  }
+  db.linkTransactionsToRecurring(links);
+
+  let duesSkipped = 0;
+  for (const skip of skippedDues.slice(0, 500)) {
+    if (
+      !skip ||
+      typeof skip.recurringId !== "number" ||
+      !items.has(skip.recurringId) ||
+      typeof skip.due !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(skip.due)
+    )
+      continue;
+    db.skipRecurringDue(skip.recurringId, skip.due);
+    duesSkipped++;
+  }
+
   deleteJob(IMPORT_CHECK_JOB);
   return {
     ok: true,
     result: { ...result, invalid: prep.invalid },
-    review: { categoriesApplied, oneOffsResolved },
+    review: {
+      categoriesApplied,
+      oneOffsResolved,
+      recurringLinked: links.length,
+      duesSkipped,
+    },
     ...snapshot(),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Links between bookings and recurring due dates (manual corrections)
+// ---------------------------------------------------------------------------
+
+function toIsoDay(value: unknown): string | null {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+/** Link one booking to the due date it settles (and teach the pattern). */
+export async function linkTransactionAction(
+  transactionId: number,
+  recurringId: number,
+  due: string
+): Promise<CsvImportResponse> {
+  const day = toIsoDay(due);
+  const known = db.listRecurring().some((item) => item.id === recurringId);
+  const exists = db.listTransactions().some((transaction) => transaction.id === transactionId);
+  if (day && known && exists) {
+    db.linkTransactionsToRecurring([{ transactionId, recurringId, due: day }]);
+  }
+  return { ok: true, ...snapshot() };
+}
+
+export async function unlinkTransactionAction(
+  transactionId: number
+): Promise<CsvImportResponse> {
+  db.unlinkTransaction(transactionId);
+  return { ok: true, ...snapshot() };
+}
+
+/** Mark a due date as settled without a booking, or take that back. */
+export async function setRecurringDueSkippedAction(
+  recurringId: number,
+  due: string,
+  skipped: boolean
+): Promise<AppState> {
+  const day = toIsoDay(due);
+  if (day && db.listRecurring().some((item) => item.id === recurringId)) {
+    if (skipped) db.skipRecurringDue(recurringId, day);
+    else db.unskipRecurringDue(recurringId, day);
+  }
+  return db.getAppState();
+}
+
+/** Run the matcher over every unlinked booking; returns how many it linked. */
+export async function relinkRecurringAction(): Promise<
+  CsvImportResponse & { linked: number }
+> {
+  const linked = db.relinkRecurring();
+  return { ok: true, linked, ...snapshot() };
 }
 
 // ---------------------------------------------------------------------------

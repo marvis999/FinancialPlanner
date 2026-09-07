@@ -24,6 +24,18 @@ export interface RecurringItem {
    * budget can cap it. Null = not assigned: no budget covers this item.
    */
   category: string | null;
+  /**
+   * Counterparty pattern learned from the first booking the user confirmed
+   * for this item: the normalized name and the IBAN. Later imports link a
+   * booking with the same counterparty without asking. Null = not learned yet.
+   */
+  matchName: string | null;
+  matchIban: string | null;
+  /**
+   * Due dates the user marked as settled without a booking ("skipped this
+   * time"), so they stop being reported as missing. ISO dates.
+   */
+  skippedDues: string[];
 }
 
 /** Monthly spending limit for one category. */
@@ -81,6 +93,13 @@ export interface TransactionItem {
   category: string | null;
   /** Free-form user labels, e.g. "Urlaub 2026" or "Hund". */
   tags: string[];
+  /**
+   * The recurring item this booking settles, and the due date it settles.
+   * Null = not linked: either a variable booking, or a recurring charge the
+   * matcher has not recognized yet.
+   */
+  recurringId: number | null;
+  recurringDue: string | null;
 }
 
 /** A category (re-)assignment proposed by Claude for one merchant group. */
@@ -150,6 +169,66 @@ export interface ImportCheckFinding {
     date: string;
   } | null;
   oneOffReason: string;
+  /** Due date of a recurring item this payment appears to settle. */
+  recurring: {
+    id: number;
+    name: string;
+    amount: number; // positive magnitude, sign via kind
+    kind: Kind;
+    due: string;
+  } | null;
+  recurringReason: string;
+}
+
+/** One new booking of an upload, as the review lists it. */
+export interface ImportBooking {
+  fingerprint: string;
+  date: string;
+  name: string;
+  /** Signed: + income, − expense. */
+  amount: number;
+  purpose: string;
+  /** Category the keyword fallback assigns. */
+  category: string;
+}
+
+/** A due date of a recurring item, as the review names it. */
+export interface ImportExpectedDue {
+  recurringId: number;
+  name: string;
+  amount: number; // positive magnitude, sign via kind
+  kind: Kind;
+  due: string;
+}
+
+/**
+ * A booking the matcher linked to a due date before any model ran. "pattern":
+ * a counterparty confirmed earlier; "heuristic": exact amount plus a word of
+ * the item's name, shown for confirmation.
+ */
+export interface ImportRecurringMatch extends ImportExpectedDue {
+  fingerprint: string;
+  confidence: "pattern" | "heuristic";
+}
+
+/**
+ * What an upload contains, computed deterministically the moment the file is
+ * validated - so the review can show every booking and every missing charge
+ * even when the Claude check fails or is skipped.
+ */
+export interface ImportSummary {
+  /** Bookings not in the ledger yet, newest first. */
+  bookings: ImportBooking[];
+  /** Rows already in the ledger. */
+  duplicates: number;
+  /** Rows the parser rejected. */
+  invalid: number;
+  /** Span of the new bookings; empty strings when there are none. */
+  minDate: string;
+  maxDate: string;
+  recurringMatches: ImportRecurringMatch[];
+  /** Due dates inside the span that no booking settles, oldest first. */
+  expected: ImportExpectedDue[];
 }
 
 /** Outcome of the Claude pre-import check over one uploaded CSV. */
@@ -173,6 +252,15 @@ export interface ImportReviewDecision {
   category: string | null;
   /** Accepted one-off match: the planned item is removed once imported. */
   oneOffId: number | null;
+  /** Accepted recurring match: the booking is linked to this due date. */
+  recurringId?: number | null;
+  recurringDue?: string | null;
+}
+
+/** A due date the user marked as settled without a booking. */
+export interface ImportSkippedDue {
+  recurringId: number;
+  due: string;
 }
 
 /** Actual account balance at the end of a given month (from imported data). */

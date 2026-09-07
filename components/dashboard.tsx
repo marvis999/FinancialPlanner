@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Link2,
   Trash2,
   TrendingUp,
   Wallet,
@@ -15,14 +16,18 @@ import {
   addOneOffAction,
   addRecurringAction,
   addTransactionTagAction,
+  applyCategorySuggestionAction,
   deleteBudgetAction,
   deleteOneOffAction,
   deleteRecurringAction,
+  linkTransactionAction,
+  relinkRecurringAction,
   removeTransactionTagAction,
-  applyCategorySuggestionAction,
+  setRecurringDueSkippedAction,
   setTransactionCategoryAction,
   toggleOneOffActiveAction,
   toggleRecurringActiveAction,
+  unlinkTransactionAction,
   updateBudgetAction,
   updateOneOffAction,
   updateRecurringAction,
@@ -81,7 +86,12 @@ import {
   effectiveRemaining,
   tsOf,
 } from "@/lib/projection";
-import type { AppState, TransactionItem } from "@/lib/types";
+import {
+  linksByRecurring,
+  recurringStatus,
+} from "@/lib/recurring-match";
+import { AssignBookingDialog, RecurringStatusLine } from "@/components/recurring-status";
+import type { AppState, RecurringItem, TransactionItem } from "@/lib/types";
 import { useFormatters } from "@/lib/use-formatters";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +113,7 @@ export function Dashboard({
 }) {
   const msg = useTranslations("dashboard");
   const msgCommon = useTranslations("common");
+  const msgStatus = useTranslations("recurringStatus");
   // Same key as the browser tab, so the two names cannot drift apart.
   const msgMeta = useTranslations("meta");
   const {
@@ -127,6 +138,11 @@ export function Dashboard({
     id: number;
     name: string;
   } | null>(null);
+  // The due date a booking is being picked for, from the recurring table.
+  const [assigning, setAssigning] = React.useState<{ item: RecurringItem; due: string } | null>(
+    null
+  );
+  const [relinkNotice, setRelinkNotice] = React.useState<number | null>(null);
 
   const run = React.useCallback(
     (fn: () => Promise<AppState>) => {
@@ -153,6 +169,19 @@ export function Dashboard({
       setTransactions(res.transactions);
     }
   }, []);
+
+  /** Link actions return the whole snapshot: the ledger changed too. */
+  const runLink = React.useCallback(
+    (fn: () => Promise<CsvImportResponse>) => {
+      startTransition(async () => {
+        handleImported(await fn());
+      });
+    },
+    [startTransition, handleImported]
+  );
+
+  // Which booking settled which due date, read once from the ledger.
+  const recurringLinks = React.useMemo(() => linksByRecurring(transactions), [transactions]);
 
   // Null when the import is too short to average honestly; every consumer
   // below has to say "unknown" rather than draw a zero as if it were a fact.
@@ -614,6 +643,31 @@ export function Dashboard({
                   {msg("recurringPausedNote")}
                 </>
               }
+              aside={
+                hasHistory && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {relinkNotice !== null && (
+                      <span>{msgStatus("relinkDone", { count: relinkNotice })}</span>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      disabled={isPending}
+                      onClick={() =>
+                        runLink(async () => {
+                          const res = await relinkRecurringAction();
+                          setRelinkNotice(res.linked);
+                          return res;
+                        })
+                      }
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                      {msgStatus("relink")}
+                    </Button>
+                  </div>
+                )
+              }
             />
             <Card>
               <CardContent className="pt-6">
@@ -635,6 +689,23 @@ export function Dashboard({
                     endDate: item.endDate,
                     isActive: item.isActive,
                     category: item.category,
+                    statusLine: hasHistory ? (
+                      <RecurringStatusLine
+                        status={recurringStatus(
+                          item,
+                          recurringLinks.get(item.id) ?? [],
+                          anchorDate
+                        )}
+                        disabled={isPending}
+                        onAssign={(due) => setAssigning({ item, due })}
+                        onUnlink={(transactionId) =>
+                          runLink(() => unlinkTransactionAction(transactionId))
+                        }
+                        onSkip={(due, skipped) =>
+                          run(() => setRecurringDueSkippedAction(item.id, due, skipped))
+                        }
+                      />
+                    ) : undefined,
                   }))}
                   payoffs={payoffs}
                   onDelete={(row) =>
@@ -794,6 +865,21 @@ export function Dashboard({
           <AnalysisTab disabled={isPending} />
         </TabsContent>
       </Tabs>
+
+      {assigning !== null && (
+        <AssignBookingDialog
+          item={assigning.item}
+          due={assigning.due}
+          transactions={transactions}
+          disabled={isPending}
+          onPick={(transactionId) => {
+            const { item, due } = assigning;
+            setAssigning(null);
+            runLink(() => linkTransactionAction(transactionId, item.id, due));
+          }}
+          onClose={() => setAssigning(null)}
+        />
+      )}
 
       {/* ------------------------------- Edit dialog ---------------------- */}
       {/* Mounted only while open. Toggling `open` on a permanently mounted

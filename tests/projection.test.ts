@@ -39,6 +39,9 @@ function rec(over: Partial<RecurringItem> = {}): RecurringItem {
     endDate: null,
     isActive: true,
     category: null,
+    matchName: null,
+    matchIban: null,
+    skippedDues: [],
     ...over,
   };
 }
@@ -558,7 +561,8 @@ describe("dailyActualBalances", () => {
     const out = dailyActualBalances(
       rows.map((r) => ({
         id: 0, name: "", amount: 0, type: "", purpose: "",
-        counterpartyIban: "", category: null, tags: [], ...r,
+        counterpartyIban: "", category: null, tags: [],
+        recurringId: null, recurringDue: null, ...r,
       }))
     );
     expect(out).toEqual([

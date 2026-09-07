@@ -379,6 +379,8 @@ export function buildDemoDataset(today: string): DemoDataset {
   // Recurring anchors sit in the first history month, so every schedule has a
   // real past due date to step forward from.
   const a = firstMonth;
+  const quarterAnchor =
+    [0, 1, 2].map((offset) => addMonths(a, offset)).find((month) => month.month % 3 === 1) ?? a;
   const recurring: DemoRecurring[] = [
     plan("Gehalt", SALARY, "income", 1, false, iso(a.year, a.month, 15), null),
     plan("Miete", RENT, "expense", 1, true, iso(a.year, a.month, 1), "wohnen"),
@@ -390,7 +392,10 @@ export function buildDemoDataset(today: string): DemoDataset {
     plan("Hausratversicherung", 12.5, "expense", 1, true, iso(a.year, a.month, 2), "versicherungen"),
     plan("Fitnessstudio", 29.9, "expense", 1, true, iso(a.year, a.month, 8), "sonstiges"),
     plan("ETF-Sparplan", 150, "expense", 1, false, iso(a.year, a.month, 15), "sonstiges"),
-    plan("Rundfunkbeitrag", 55.08, "expense", 3, true, iso(a.year, a.month, 15), "telefon"),
+    // Anchored on a quarter month (January, April, July, October), the same
+    // months the ledger above books it in, so the schedule and the bookings
+    // line up and the matcher can link them.
+    plan("Rundfunkbeitrag", 55.08, "expense", 3, true, iso(quarterAnchor.year, quarterAnchor.month, 15), "telefon"),
     plan("Kfz-Versicherung", 384, "expense", 12, true, iso(a.year, 1, 10), "versicherungen"),
     {
       name: "Autokredit",

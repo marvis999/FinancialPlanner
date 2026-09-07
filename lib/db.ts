@@ -12,6 +12,13 @@ import {
   type DataSource,
 } from "./data-source";
 import { buildDemoDataset } from "./demo-data";
+import {
+  matchRecurring,
+  normalizeIban,
+  normalizeName,
+  settledKey,
+  type MatchCandidate,
+} from "./recurring-match";
 import type {
   AppState,
   BudgetItem,
@@ -138,6 +145,12 @@ function openDatabase(file: string): Database.Database {
       amount     REAL    NOT NULL,
       created_at TEXT    NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS recurring_skipped_dues (
+      recurring_id INTEGER NOT NULL,
+      due          TEXT    NOT NULL,
+      PRIMARY KEY (recurring_id, due)
+    );
   `);
 
   // Lightweight migrations: add columns to existing tables when missing.
@@ -157,6 +170,15 @@ function openDatabase(file: string): Database.Database {
   ensureColumn(database, "settings", "budget_start_day", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(database, "transactions", "category", "TEXT");
   ensureColumn(database, "transactions", "tags", "TEXT");
+  ensureColumn(database, "recurring", "match_name", "TEXT");
+  ensureColumn(database, "recurring", "match_iban", "TEXT");
+  ensureColumn(database, "transactions", "recurring_due", "TEXT");
+  if (ensureColumn(database, "transactions", "recurring_id", "INTEGER")) {
+    database.exec(
+      "CREATE INDEX IF NOT EXISTS idx_transactions_recurring ON transactions(recurring_id)"
+    );
+    backfillRecurringLinks(database);
+  }
 
   const hasSettings = database
     .prepare("SELECT COUNT(*) AS c FROM settings WHERE id = 1")
@@ -211,14 +233,109 @@ function backfillRecurringCategories(database: Database.Database): void {
   })();
 }
 
+/**
+ * One-shot pass over the whole ledger when the link columns are created (and
+ * after the demo is seeded): every booking the matcher recognizes is linked
+ * to the due date it settles, and each item learns its counterparty from its
+ * first link. From then on the pre-import review knows what to expect.
+ */
+function backfillRecurringLinks(database: Database.Database): void {
+  const items = readRecurring(database).filter((recurring) => recurring.isActive);
+  if (!items.length) return;
+  const rows = database
+    .prepare(
+      "SELECT id, date, name, amount, purpose, counterparty_iban FROM transactions WHERE recurring_id IS NULL"
+    )
+    .all() as Array<{
+    id: number;
+    date: string;
+    name: string;
+    amount: number;
+    purpose: string | null;
+    counterparty_iban: string | null;
+  }>;
+  if (!rows.length) return;
+  const candidates: MatchCandidate[] = rows.map((row) => ({
+    key: String(row.id),
+    date: row.date,
+    name: row.name,
+    purpose: row.purpose ?? "",
+    amount: row.amount,
+    iban: row.counterparty_iban ?? "",
+  }));
+  const { matches } = matchRecurring(items, candidates, readSettledDues(database));
+  applyLinks(
+    database,
+    matches.map((match) => ({
+      transactionId: Number(match.key),
+      recurringId: match.recurringId,
+      due: match.due,
+    }))
+  );
+}
+
+/**
+ * Link bookings to due dates. An item without a learned counterparty takes
+ * it from the booking it is linked to; a learned one is kept, so the first
+ * confirmation decides and a later odd match cannot retrain it silently.
+ */
+function applyLinks(
+  database: Database.Database,
+  links: Array<{ transactionId: number; recurringId: number; due: string }>
+): void {
+  if (!links.length) return;
+  const link = database.prepare(
+    "UPDATE transactions SET recurring_id = ?, recurring_due = ? WHERE id = ?"
+  );
+  const learn = database.prepare(
+    `UPDATE recurring SET match_name = ?, match_iban = ?
+     WHERE id = ? AND match_name IS NULL AND match_iban IS NULL`
+  );
+  const counterparty = database.prepare(
+    "SELECT name, counterparty_iban FROM transactions WHERE id = ?"
+  );
+  database.transaction(() => {
+    for (const entry of links) {
+      link.run(entry.recurringId, entry.due, entry.transactionId);
+      const row = counterparty.get(entry.transactionId) as
+        | { name: string; counterparty_iban: string | null }
+        | undefined;
+      if (!row) continue;
+      const iban = normalizeIban(row.counterparty_iban ?? "");
+      learn.run(normalizeName(row.name) || null, iban || null, entry.recurringId);
+    }
+  })();
+}
+
+function readSettledDues(database: Database.Database): Set<string> {
+  const rows = database
+    .prepare(
+      "SELECT recurring_id, recurring_due FROM transactions WHERE recurring_id IS NOT NULL AND recurring_due IS NOT NULL"
+    )
+    .all() as Array<{ recurring_id: number; recurring_due: string }>;
+  return new Set(rows.map((row) => settledKey(row.recurring_id, row.recurring_due)));
+}
+
 // ---------------------------------------------------------------------------
 // Recurring (monthly) items
 // ---------------------------------------------------------------------------
 
 export function listRecurring(): RecurringItem[] {
-  const rows = getDb()
+  return readRecurring(getDb());
+}
+
+function readRecurring(database: Database.Database): RecurringItem[] {
+  const skipped = new Map<number, string[]>();
+  for (const row of database
+    .prepare("SELECT recurring_id, due FROM recurring_skipped_dues ORDER BY due ASC")
+    .all() as Array<{ recurring_id: number; due: string }>) {
+    const list = skipped.get(row.recurring_id) ?? [];
+    list.push(row.due);
+    skipped.set(row.recurring_id, list);
+  }
+  const rows = database
     .prepare(
-      "SELECT id, name, amount, kind, interval_months, is_contract, date, remaining_amount, remaining_as_of, end_date, is_active, category FROM recurring ORDER BY id DESC"
+      "SELECT id, name, amount, kind, interval_months, is_contract, date, remaining_amount, remaining_as_of, end_date, is_active, category, match_name, match_iban FROM recurring ORDER BY id DESC"
     )
     .all() as Array<{
     id: number;
@@ -233,6 +350,8 @@ export function listRecurring(): RecurringItem[] {
     end_date: string | null;
     is_active: number;
     category: string | null;
+    match_name: string | null;
+    match_iban: string | null;
   }>;
   return rows.map((row) => ({
     id: row.id,
@@ -247,7 +366,53 @@ export function listRecurring(): RecurringItem[] {
     endDate: row.end_date,
     isActive: !!row.is_active,
     category: row.category,
+    matchName: row.match_name,
+    matchIban: row.match_iban,
+    skippedDues: skipped.get(row.id) ?? [],
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Links between bookings and the due dates they settle
+// ---------------------------------------------------------------------------
+
+/** Link bookings to due dates; an item without a pattern learns its counterparty. */
+export function linkTransactionsToRecurring(
+  links: Array<{ transactionId: number; recurringId: number; due: string }>
+): void {
+  applyLinks(getDb(), links);
+}
+
+export function unlinkTransaction(transactionId: number): void {
+  getDb()
+    .prepare("UPDATE transactions SET recurring_id = NULL, recurring_due = NULL WHERE id = ?")
+    .run(transactionId);
+}
+
+/** Mark a due date as settled without a booking ("skipped this time"). */
+export function skipRecurringDue(recurringId: number, due: string): void {
+  getDb()
+    .prepare(
+      "INSERT OR IGNORE INTO recurring_skipped_dues (recurring_id, due) VALUES (?, ?)"
+    )
+    .run(recurringId, due);
+}
+
+export function unskipRecurringDue(recurringId: number, due: string): void {
+  getDb()
+    .prepare("DELETE FROM recurring_skipped_dues WHERE recurring_id = ? AND due = ?")
+    .run(recurringId, due);
+}
+
+/**
+ * Run the matcher over every unlinked booking, for items added or renamed
+ * after the one-shot backfill. Returns how many bookings were linked.
+ */
+export function relinkRecurring(): number {
+  const database = getDb();
+  const before = readSettledDues(database).size;
+  backfillRecurringLinks(database);
+  return readSettledDues(database).size - before;
 }
 
 /** Pause or resume a recurring item (paused = kept, but not forecast). */
@@ -383,7 +548,14 @@ function updateTags(ids: number[], change: (tags: string[]) => string[]): void {
 }
 
 export function deleteRecurring(id: number): void {
-  getDb().prepare("DELETE FROM recurring WHERE id = ?").run(id);
+  const database = getDb();
+  database.transaction(() => {
+    database
+      .prepare("UPDATE transactions SET recurring_id = NULL, recurring_due = NULL WHERE recurring_id = ?")
+      .run(id);
+    database.prepare("DELETE FROM recurring_skipped_dues WHERE recurring_id = ?").run(id);
+    database.prepare("DELETE FROM recurring WHERE id = ?").run(id);
+  })();
 }
 
 // ---------------------------------------------------------------------------
@@ -524,7 +696,8 @@ export function updateSettings(settings: Settings): void {
 export function listTransactions(): TransactionItem[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, date, name, amount, type, purpose, counterparty_iban, balance, category, tags
+      `SELECT id, date, name, amount, type, purpose, counterparty_iban, balance, category, tags,
+              recurring_id, recurring_due
        FROM transactions
        ORDER BY date DESC, id DESC`
     )
@@ -539,6 +712,8 @@ export function listTransactions(): TransactionItem[] {
     balance: number | null;
     category: string | null;
     tags: string | null;
+    recurring_id: number | null;
+    recurring_due: string | null;
   }>;
   return rows.map((row) => ({
     id: row.id,
@@ -551,6 +726,8 @@ export function listTransactions(): TransactionItem[] {
     balance: row.balance ?? 0,
     category: row.category,
     tags: parseTags(row.tags),
+    recurringId: row.recurring_id,
+    recurringDue: row.recurring_due,
   }));
 }
 
@@ -819,6 +996,9 @@ function seedDemo(database: Database.Database): void {
   // Derives every running balance backwards from the newest booking, exactly
   // as a real import does, so the ledger and the settings agree.
   rebalanceTo(database, data.currentBalance);
+  // The demo household pays its rent and its subscriptions like anyone else:
+  // link them, so the status column and the import review have history.
+  backfillRecurringLinks(database);
 }
 
 /**
@@ -833,7 +1013,7 @@ export function resetDemoData(): void {
     throw new Error(`refusing to reset ${file}: not the demo database`);
   }
   database.exec(
-    "DELETE FROM transactions; DELETE FROM recurring; DELETE FROM oneoff; DELETE FROM budgets;"
+    "DELETE FROM transactions; DELETE FROM recurring; DELETE FROM recurring_skipped_dues; DELETE FROM oneoff; DELETE FROM budgets;"
   );
   seedDemo(database);
 }

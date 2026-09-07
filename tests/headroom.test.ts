@@ -21,6 +21,9 @@ const rec = (over: Partial<RecurringItem> = {}): RecurringItem => ({
   endDate: null,
   isActive: true,
   category: null,
+  matchName: null,
+  matchIban: null,
+  skippedDues: [],
   ...over,
 });
 const one = (over: Partial<OneOffItem> = {}): OneOffItem => ({

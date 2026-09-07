@@ -98,7 +98,12 @@ describe("confirmCsvImportAction", () => {
 
     expect(res.ok).toBe(true);
     expect(res.result?.added).toBe(3);
-    expect(res.review).toEqual({ categoriesApplied: 1, oneOffsResolved: 1 });
+    expect(res.review).toEqual({
+      categoriesApplied: 1,
+      oneOffsResolved: 1,
+      recurringLinked: 0,
+      duesSkipped: 0,
+    });
 
     const byName = new Map(res.transactions.map((t) => [t.name, t]));
     expect(byName.get("Apotheke am Markt")?.category).toBe("lebensmittel");
@@ -117,7 +122,7 @@ describe("confirmCsvImportAction", () => {
       { fingerprint: fp(text, "Laden GmbH"), category: "quatsch", oneOffId: 12345 },
     ]);
     expect(res.ok).toBe(true);
-    expect(res.review).toEqual({ categoriesApplied: 0, oneOffsResolved: 0 });
+    expect(res.review).toMatchObject({ categoriesApplied: 0, oneOffsResolved: 0 });
     expect(res.transactions[0].category).toBeNull();
     expect(db.listOneOff()).toHaveLength(0);
   });
@@ -183,7 +188,7 @@ describe("confirmCsvImportAction", () => {
       { fingerprint: fp(text, "TUEV Nord"), category: null, oneOffId: id },
       { fingerprint: fp(text, "TUEV Sued"), category: null, oneOffId: id },
     ]);
-    expect(res.review).toEqual({ categoriesApplied: 0, oneOffsResolved: 1 });
+    expect(res.review).toMatchObject({ categoriesApplied: 0, oneOffsResolved: 1 });
     expect(db.listOneOff()).toHaveLength(0);
   });
 });
@@ -194,7 +199,8 @@ describe("startCsvCheckAction", () => {
     const text = csv(row());
     await actions.confirmCsvImportAction(text, 100, []);
     const res = await actions.startCsvCheckAction(text);
-    expect(res).toEqual({ ok: true, nothingNew: true });
+    expect(res).toMatchObject({ ok: true, nothingNew: true });
+    expect(res.summary).toMatchObject({ bookings: [], duplicates: 1 });
   });
 
   it("asks for the balance before checking a first import", async () => {
