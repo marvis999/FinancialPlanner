@@ -1125,3 +1125,70 @@ describe("budget periods anchored on a salary day", () => {
     });
   });
 });
+
+/* ------------------------------------------------------------------------- */
+/*  The breakdown has to explain the figure it hangs off                     */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * MonthlyNetHover's arithmetic, verbatim: it sums the items and budgets it is
+ * handed and prints the result under the same label as the stat card. Feeding
+ * it anything but computeMonthlyCost's own output made the panel contradict
+ * the number it was attached to - 1.100 EUR inside a hover on "2.000,00 EUR".
+ */
+function hoverNet(cost: ReturnType<typeof computeMonthlyCost>) {
+  const eq = (item: RecurringItem) => item.amount / (item.intervalMonths || 1);
+  const income = cost.items
+    .filter((item) => item.kind === "income")
+    .reduce((total, item) => total + eq(item), 0);
+  const expense =
+    cost.items
+      .filter((item) => item.kind === "expense")
+      .reduce((total, item) => total + eq(item), 0) +
+    cost.budgets.reduce((total, budget) => total + budget.amount, 0);
+  return income - expense;
+}
+
+describe("computeMonthlyCost reconciles with its own breakdown", () => {
+  const anchor = "2026-09-01";
+
+  it("a budget covered by a fixed item is netted in both the total and the rows", () => {
+    const cost = computeMonthlyCost(
+      st(
+        [
+          rec({ name: "Gehalt", amount: 3000, kind: "income" }),
+          rec({ name: "Miete", amount: 900, category: "wohnen" }),
+        ],
+        [],
+        [{ id: 1, category: "wohnen", amount: 1000 }]
+      ),
+      anchor
+    );
+    expect(cost.summary.monthlyNet).toBe(2000);
+    expect(hoverNet(cost)).toBe(cost.summary.monthlyNet);
+  });
+
+  it("a repaid loan is absent from the rows as well as the total", () => {
+    const cost = computeMonthlyCost(
+      st([
+        rec({ name: "Gehalt", amount: 3000, kind: "income" }),
+        rec({ name: "Abbezahlt", amount: 300, remainingAmount: 0, remainingAsOf: "2026-08-01" }),
+      ]),
+      anchor
+    );
+    expect(cost.items.map((item) => item.name)).toEqual(["Gehalt"]);
+    expect(hoverNet(cost)).toBe(cost.summary.monthlyNet);
+  });
+
+  it("a contract that has not started is absent from the rows as well as the total", () => {
+    const cost = computeMonthlyCost(
+      st([
+        rec({ name: "Gehalt", amount: 3000, kind: "income" }),
+        rec({ name: "Leasing ab 2028", amount: 400, date: "2028-01-01" }),
+      ]),
+      anchor
+    );
+    expect(cost.items.map((item) => item.name)).toEqual(["Gehalt"]);
+    expect(hoverNet(cost)).toBe(cost.summary.monthlyNet);
+  });
+});

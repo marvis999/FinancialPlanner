@@ -57,7 +57,7 @@
     "title": "So berechnet sich der Monatsschnitt",
     "income": "Einnahmen",
     "expenses": "Ausgaben",
-    "budgets": "Budgets",
+    "budgets": "Budgets, Rest nach festen Posten",
     "incomePerMonth": "Einnahmen pro Monat",
     "expensePerMonth": "Ausgaben pro Monat",
     "netPerMonth": "Saldo pro Monat",

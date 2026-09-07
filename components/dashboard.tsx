@@ -74,7 +74,7 @@ import {
   buildChartSeries,
   computeDailyProjection,
   computeLoanPayoffs,
-  computeSummary,
+  computeMonthlyCost,
   computeTrend,
   dailyActualBalances,
   debtHeadroom,
@@ -179,10 +179,15 @@ export function Dashboard({
   const balanceMatchesLedger =
     !hasHistory ||
     Math.abs(state.settings.startingBalance - transactions[0].balance) < 0.005;
-  const summary = React.useMemo(
-    () => computeSummary(state, anchorDate),
+  // One call yields the items and the netted budgets alongside the totals:
+  // the hover breakdown has to explain the very figure the stat card shows,
+  // so both read the same three values from one call. Re-deriving the item list (or reaching for the raw budgets)
+  // made the panel print a different net than the number it was attached to.
+  const monthlyCost = React.useMemo(
+    () => computeMonthlyCost(state, anchorDate),
     [state, anchorDate]
   );
+  const summary = monthlyCost.summary;
   // Money already spent per category in the anchor budget period (which is
   // the calendar month for budgetStartDay 1, or e.g. 15th-to-14th), so
   // budgets only book their unspent rest for the current period. Signed:
@@ -266,14 +271,6 @@ export function Dashboard({
         .map((recurring) => ({ id: recurring.id, name: recurring.name })),
     [state.recurring]
   );
-  const activeRecurring = React.useMemo(
-    () =>
-      state.recurring.filter(
-        (recurring) => recurring.isActive && !(recurring.endDate && recurring.endDate < anchorDate)
-      ),
-    [state.recurring, anchorDate]
-  );
-
   // What a payment on `date` would actually clear, for the "komplett tilgen"
   // shortcut. This asks the same walk the forecast uses instead of evaluating
   // the debt at the typed date: the two disagree whenever the payment gets
@@ -611,7 +608,7 @@ export function Dashboard({
                 <>
 
                   {msg("recurringAverage")}
-                  <MonthlyNetHover items={activeRecurring} budgets={state.budgets}>
+                  <MonthlyNetHover items={monthlyCost.items} budgets={monthlyCost.budgets}>
                     {formatEuro(summary.monthlyNet)}
                   </MonthlyNetHover>
                   {msg("recurringPausedNote")}
@@ -655,7 +652,7 @@ export function Dashboard({
                     expense: summary.monthlyExpense,
                   }}
                   totalsCell={
-                    <MonthlyNetHover items={activeRecurring} budgets={state.budgets}>
+                    <MonthlyNetHover items={monthlyCost.items} budgets={monthlyCost.budgets}>
                       {formatEuro(summary.monthlyNet)}
                     </MonthlyNetHover>
                   }

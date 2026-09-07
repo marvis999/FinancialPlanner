@@ -57,7 +57,7 @@
     "title": "How the monthly average is calculated",
     "income": "Income",
     "expenses": "Expenses",
-    "budgets": "Budgets",
+    "budgets": "Budgets, rest after fixed items",
     "incomePerMonth": "Income per month",
     "expensePerMonth": "Expenses per month",
     "netPerMonth": "Net per month",
