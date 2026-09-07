@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  countRecurringStatuses,
   dueDatesBetween,
   fixedChargesByCategory,
   linksByRecurring,
@@ -266,6 +267,25 @@ describe("recurringStatus", () => {
 
   it("ignores paused items", () => {
     expect(recurringStatus(item({ isActive: false }), [], "2026-08-04")).toBeNull();
+  });
+});
+
+describe("countRecurringStatuses", () => {
+  it("counts the three states the summary reports", () => {
+    expect(
+      countRecurringStatuses([
+        { kind: "settled", due: "2026-08-01", date: "2026-08-01", amount: -900, transactionId: 1 },
+        { kind: "settled", due: "2026-08-12", date: "2026-08-12", amount: -14, transactionId: 2 },
+        { kind: "open", due: "2026-08-15", daysOpen: 5, recognizable: true },
+        { kind: "skipped", due: "2026-08-20" },
+      ])
+    ).toEqual({ settled: 2, open: 1, skipped: 1 });
+  });
+
+  it("counts an item that is not due yet as neither paid nor missing", () => {
+    expect(
+      countRecurringStatuses([{ kind: "upcoming", due: "2026-09-01" }, null])
+    ).toEqual({ settled: 0, open: 0, skipped: 0 });
   });
 });
 

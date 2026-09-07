@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import { CircleCheck, CircleDashed, Link2, Link2Off, TriangleAlert } from "lucide-react";
+import {
+  Circle,
+  CircleCheck,
+  CircleDashed,
+  Link2,
+  Link2Off,
+  MinusCircle,
+  TriangleAlert,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +41,35 @@ import { cn } from "@/lib/utils";
 
 /** Days after the due date before "no booking yet" turns into a warning. */
 const GRACE_DAYS = 3;
+
+function isOverdue(status: RecurringStatus): boolean {
+  return status.kind === "open" && status.daysOpen > GRACE_DAYS;
+}
+
+/**
+ * The same state as one glyph, for the table's leading column: a filled check
+ * is paid, a hollow circle is waiting, a triangle is late. Purely decorative -
+ * `RecurringStatusLine` says the same thing in words in the very same row, so
+ * announcing it twice would only make the row longer to listen to.
+ */
+export function RecurringStatusMarker({
+  status,
+}: {
+  status: RecurringStatus | null;
+}) {
+  if (!status) return null;
+  const icon = {
+    settled: <CircleCheck className="h-4 w-4 text-success" />,
+    skipped: <MinusCircle className="h-4 w-4 text-muted-foreground/60" />,
+    upcoming: <CircleDashed className="h-4 w-4 text-muted-foreground/60" />,
+    open: isOverdue(status) ? (
+      <TriangleAlert className="h-4 w-4 text-destructive" />
+    ) : (
+      <Circle className="h-4 w-4 text-muted-foreground" />
+    ),
+  }[status.kind];
+  return <span aria-hidden="true">{icon}</span>;
+}
 
 export function RecurringStatusLine({
   status,
@@ -89,7 +126,7 @@ export function RecurringStatusLine({
         </div>
       );
     case "open": {
-      const overdue = status.daysOpen > GRACE_DAYS;
+      const overdue = isOverdue(status);
       return (
         <div
           className={cn(

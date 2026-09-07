@@ -316,6 +316,7 @@
     "recurringTitle": "Laufende Posten",
     "recurringAverage": "Ø pro Monat: ",
     "recurringPausedNote": ". Pausierte Posten zählen nicht mit.",
+    "recurringNoneOpen": "Alle bisher fälligen laufenden Posten sind gebucht oder übersprungen.",
     "recurringEmpty": "Noch keine laufenden Einträge.",
     "addOneOffTitle": "Einmaligen Posten hinzufügen",
     "addOneOffDescription": "Unregelmäßige Beträge zu einem Datum. Auch geplante Einnahmen erscheinen in der Prognose.",
@@ -423,6 +424,9 @@
     "assignDescription": "Fällig am {date}, {amount}. Umsätze in der Nähe des Termins, die noch keinem Posten zugeordnet sind.",
     "assignEmpty": "Kein passender Umsatz in der Nähe des Termins.",
     "pick": "Zuordnen",
+    "counts": "{settled} gebucht · {open} offen{skipped, plural, =0 {} other { · # übersprungen}}",
+    "onlyOpen": "Nur offene",
+    "onlyOpenAll": "Alle anzeigen",
     "relink": "Umsätze zuordnen",
     "relinkDone": "{count, plural, =0 {Keine neuen Zuordnungen.} one {# Umsatz zugeordnet.} other {# Umsätze zugeordnet.}}"
   }

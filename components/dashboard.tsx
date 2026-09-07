@@ -6,6 +6,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Link2,
+  ListFilter,
   Trash2,
   TrendingUp,
   Wallet,
@@ -87,11 +88,17 @@ import {
   tsOf,
 } from "@/lib/projection";
 import {
+  countRecurringStatuses,
   fixedChargesByCategory,
   linksByRecurring,
   recurringStatus,
+  type RecurringStatus,
 } from "@/lib/recurring-match";
-import { AssignBookingDialog, RecurringStatusLine } from "@/components/recurring-status";
+import {
+  AssignBookingDialog,
+  RecurringStatusLine,
+  RecurringStatusMarker,
+} from "@/components/recurring-status";
 import type { AppState, RecurringItem, TransactionItem } from "@/lib/types";
 import { useFormatters } from "@/lib/use-formatters";
 import { cn } from "@/lib/utils";
@@ -144,6 +151,8 @@ export function Dashboard({
     null
   );
   const [relinkNotice, setRelinkNotice] = React.useState<number | null>(null);
+  // Narrow the recurring table to what is still unpaid.
+  const [openOnly, setOpenOnly] = React.useState(false);
 
   const run = React.useCallback(
     (fn: () => Promise<AppState>) => {
@@ -248,6 +257,27 @@ export function Dashboard({
     () => fixedChargesByCategory(state.recurring, transactions, budgetPeriod, anchorDate),
     [state.recurring, transactions, budgetPeriod, anchorDate]
   );
+  // Where every recurring item stands, computed once: the summary counts it,
+  // the filter selects on it, and each row shows it as a glyph and a sentence.
+  // Empty without history - nothing can be called paid or missing then.
+  const recurringStatuses = React.useMemo(() => {
+    const byItem = new Map<number, RecurringStatus | null>();
+    if (!hasHistory) return byItem;
+    for (const item of state.recurring) {
+      byItem.set(
+        item.id,
+        recurringStatus(item, recurringLinks.get(item.id) ?? [], anchorDate)
+      );
+    }
+    return byItem;
+  }, [state.recurring, recurringLinks, anchorDate, hasHistory]);
+  const statusTally = React.useMemo(
+    () => countRecurringStatuses(recurringStatuses.values()),
+    [recurringStatuses]
+  );
+  const visibleRecurring = openOnly
+    ? state.recurring.filter((item) => recurringStatuses.get(item.id)?.kind === "open")
+    : state.recurring;
 
   const forecast = React.useMemo(
     () =>
@@ -660,7 +690,18 @@ export function Dashboard({
               }
               aside={
                 hasHistory && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{msgStatus("counts", statusTally)}</span>
+                    <Button
+                      variant={openOnly ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-8"
+                      aria-pressed={openOnly}
+                      onClick={() => setOpenOnly((previous) => !previous)}
+                    >
+                      <ListFilter className="h-3.5 w-3.5" />
+                      {openOnly ? msgStatus("onlyOpenAll") : msgStatus("onlyOpen")}
+                    </Button>
                     {relinkNotice !== null && (
                       <span>{msgStatus("relinkDone", { count: relinkNotice })}</span>
                     )}
@@ -687,8 +728,8 @@ export function Dashboard({
             <Card>
               <CardContent className="pt-6">
                 <ItemTable
-                  empty={msg("recurringEmpty")}
-                  rows={state.recurring.map((item) => ({
+                  empty={openOnly ? msg("recurringNoneOpen") : msg("recurringEmpty")}
+                  rows={visibleRecurring.map((item) => ({
                     id: item.id,
                     name: item.name,
                     kind: item.kind,
@@ -704,13 +745,12 @@ export function Dashboard({
                     endDate: item.endDate,
                     isActive: item.isActive,
                     category: item.category,
+                    statusMarker: hasHistory ? (
+                      <RecurringStatusMarker status={recurringStatuses.get(item.id) ?? null} />
+                    ) : undefined,
                     statusLine: hasHistory ? (
                       <RecurringStatusLine
-                        status={recurringStatus(
-                          item,
-                          recurringLinks.get(item.id) ?? [],
-                          anchorDate
-                        )}
+                        status={recurringStatuses.get(item.id) ?? null}
                         disabled={isPending}
                         onAssign={(due) => setAssigning({ item, due })}
                         onUnlink={(transactionId) =>
@@ -733,10 +773,17 @@ export function Dashboard({
                   disabled={isPending}
                   showDate
                   showInterval
-                  totals={{
-                    income: summary.monthlyIncome,
-                    expense: summary.monthlyExpense,
-                  }}
+                  // The monthly total describes every item, so it would
+                  // contradict a filtered list. Dropped rather than recomputed:
+                  // "the average of what is unpaid" is not a figure anyone wants.
+                  totals={
+                    openOnly
+                      ? undefined
+                      : {
+                          income: summary.monthlyIncome,
+                          expense: summary.monthlyExpense,
+                        }
+                  }
                   totalsCell={
                     <MonthlyNetHover items={monthlyCost.items} budgets={monthlyCost.budgets}>
                       {formatEuro(summary.monthlyNet)}

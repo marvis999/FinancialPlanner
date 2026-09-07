@@ -386,6 +386,38 @@ export function recurringStatus(
   };
 }
 
+/**
+ * How many items are booked, still open, or deliberately skipped.
+ *
+ * A type alias, not an interface: the UI hands this straight to next-intl,
+ * whose values parameter wants an index signature. TypeScript infers one for
+ * an alias but not for an interface, so an interface would force every call
+ * site to copy the fields out one by one.
+ */
+export type RecurringTally = {
+  settled: number;
+  open: number;
+  skipped: number;
+};
+
+/**
+ * Tally the statuses for the summary above the table. "upcoming" is counted
+ * nowhere on purpose: an item that is not due yet is neither paid nor
+ * missing, so folding it into either number would answer the question the
+ * summary exists for - what is still outstanding - with a wrong figure.
+ */
+export function countRecurringStatuses(
+  statuses: Iterable<RecurringStatus | null>
+): RecurringTally {
+  const tally: RecurringTally = { settled: 0, open: 0, skipped: 0 };
+  for (const status of statuses) {
+    if (status?.kind === "settled") tally.settled++;
+    else if (status?.kind === "open") tally.open++;
+    else if (status?.kind === "skipped") tally.skipped++;
+  }
+  return tally;
+}
+
 /* ------------------------------------------------------------------------- */
 /*  Fixed charges of a budget period                                          */
 /* ------------------------------------------------------------------------- */

@@ -316,6 +316,7 @@
     "recurringTitle": "Recurring items",
     "recurringAverage": "Avg. per month: ",
     "recurringPausedNote": ". Paused items are not counted.",
+    "recurringNoneOpen": "Every recurring item due so far is booked or skipped.",
     "recurringEmpty": "No recurring entries yet.",
     "addOneOffTitle": "Add a one-off item",
     "addOneOffDescription": "Irregular amounts on a given date. Planned income shows up in the forecast too.",
@@ -423,6 +424,9 @@
     "assignDescription": "Due {date}, {amount}. Bookings near the due date that are not assigned to any item yet.",
     "assignEmpty": "No matching booking near the due date.",
     "pick": "Assign",
+    "counts": "{settled} booked · {open} open{skipped, plural, =0 {} other { · # skipped}}",
+    "onlyOpen": "Open only",
+    "onlyOpenAll": "Show all",
     "relink": "Match bookings",
     "relinkDone": "{count, plural, =0 {No new matches.} one {# booking matched.} other {# bookings matched.}}"
   }

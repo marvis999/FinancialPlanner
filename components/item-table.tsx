@@ -42,6 +42,11 @@ export interface Row {
   category?: string | null;
   /** Recurring rows: where the item stands right now (booked, due, open). */
   statusLine?: React.ReactNode;
+  /**
+   * The same state as one glyph, for the leading column. Decorative: the
+   * status line spells the state out in words right beside it.
+   */
+  statusMarker?: React.ReactNode;
 }
 
 export function ItemTable({
@@ -81,14 +86,20 @@ export function ItemTable({
     );
   }
 
-  // Name + [date] + [interval] + type, so the total lands under the amount.
-  const leadingCols = 2 + (showDate ? 1 : 0) + (showInterval ? 1 : 0);
+  // One narrow column of glyphs, so the eye scans a single line down the
+  // table instead of reading a sentence per row.
+  const showStatus = rows.some((row) => row.statusMarker !== undefined);
+  // [status] + name + [date] + [interval] + type, so the total lands under
+  // the amount.
+  const leadingCols =
+    2 + (showDate ? 1 : 0) + (showInterval ? 1 : 0) + (showStatus ? 1 : 0);
 
   return (
     <div className="overflow-x-auto rounded-lg border">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
+            {showStatus && <TableHead className="w-9 pl-4 pr-0" />}
             <TableHead className="px-4">{msgCommon("name")}</TableHead>
             {showDate && (
               <TableHead className="w-28 px-4">{msgCommon("date")}</TableHead>
@@ -109,6 +120,13 @@ export function ItemTable({
               key={row.id}
               className={cn(row.isActive === false && "opacity-50")}
             >
+              {showStatus && (
+                <TableCell className="w-9 pl-4 pr-0 align-top">
+                  {/* Lines the glyph up with the centre of the name's first
+                      line, which is what the eye follows down the column. */}
+                  <div className="pt-0.5">{row.statusMarker}</div>
+                </TableCell>
+              )}
               <TableCell className="px-4">
                 <div className="flex items-center gap-2.5">
                   <MerchantIcon name={row.name} />
