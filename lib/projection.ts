@@ -198,6 +198,52 @@ export function computeSummary(state: AppState, asOf?: string): Summary {
   return computeMonthlyCost(state, asOf).summary;
 }
 
+/** Where a budget period is heading, split into the parts that behave alike. */
+export interface BudgetPace {
+  /** Fixed charges for the period: what is linked plus what is still due. */
+  fixed: number;
+  /** Spend beyond the fixed charges - the only part that accrues by the day. */
+  variable: number;
+  /** Variable spend per day elapsed. */
+  perDay: number;
+  /** Where the period lands: the fixed charges plus the variable pace. */
+  projected: number;
+}
+
+/**
+ * Extrapolate a budget period from the spend so far.
+ *
+ * Only the variable part accrues daily. A fixed charge lands on a single day,
+ * so dividing it by the days elapsed and multiplying by the period length
+ * invents money: a 1.200 EUR rent debited on day one of a 30-day period read
+ * as a 7.200 EUR projection on day five, in red, every month.
+ *
+ * `charged` is the part of the fixed charges already inside `spent` (linked
+ * bookings, see fixedChargesByCategory); `due` is what is still ahead of the
+ * newest booking. Keeping them apart is what stops a rent that has not landed
+ * yet from swallowing the groceries, and a yearly premium that has landed
+ * from being extrapolated as a daily rate.
+ */
+export function projectBudgetSpend(
+  spent: number,
+  charges: { charged: number; due: number },
+  elapsedDays: number,
+  totalDays: number
+): BudgetPace {
+  const days = Math.max(1, elapsedDays);
+  const charged = Math.max(0, charges.charged);
+  const due = Math.max(0, charges.due);
+  const carried = Math.min(Math.max(0, spent), charged);
+  const variable = Math.max(0, spent - carried);
+  const perDay = variable / days;
+  return {
+    fixed: charged + due,
+    variable,
+    perDay,
+    projected: charged + due + perDay * totalDays,
+  };
+}
+
 /* ------------------------------------------------------------------------- */
 /*  Day-granular forecast                                                     */
 /* ------------------------------------------------------------------------- */

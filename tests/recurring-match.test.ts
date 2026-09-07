@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   dueDatesBetween,
+  fixedChargesByCategory,
   linksByRecurring,
   matchRecurring,
   normalizeName,
@@ -265,5 +266,35 @@ describe("recurringStatus", () => {
 
   it("ignores paused items", () => {
     expect(recurringStatus(item({ isActive: false }), [], "2026-08-04")).toBeNull();
+  });
+});
+
+describe("fixedChargesByCategory", () => {
+  const period = { start: "2026-08-01", end: "2026-08-31" };
+
+  it("counts a linked booking as charged and an unlinked future due date as due", () => {
+    const rent = item();
+    const netflix = item({ name: "Netflix", amount: 13.99, date: "2026-01-12", category: "telefon" });
+    const charges = fixedChargesByCategory(
+      [rent, netflix],
+      [ledger({ recurringId: rent.id, recurringDue: "2026-08-01" })],
+      period,
+      "2026-08-05"
+    );
+    expect(charges.get("wohnen")).toEqual({ charged: 900, due: 0, items: ["Miete"] });
+    expect(charges.get("telefon")).toEqual({ charged: 0, due: 13.99, items: ["Netflix"] });
+  });
+
+  it("assumes a past unlinked charge is in the bookings only for an unconfirmed item", () => {
+    const unknown = item({ name: "Miete" });
+    const known = item({ name: "Strom", amount: 92, matchIban: "DE1", date: "2026-01-03" });
+    const charges = fixedChargesByCategory([unknown, known], [], period, "2026-08-10");
+    expect(charges.get("wohnen")).toEqual({ charged: 900, due: 92, items: ["Miete", "Strom"] });
+  });
+
+  it("leaves out skipped due dates and items without a category", () => {
+    const rent = item({ skippedDues: ["2026-08-01"] });
+    const loose = item({ name: "Sonst", category: null });
+    expect(fixedChargesByCategory([rent, loose], [], period, "2026-08-10").size).toBe(0);
   });
 });

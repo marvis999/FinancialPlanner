@@ -87,6 +87,7 @@ import {
   tsOf,
 } from "@/lib/projection";
 import {
+  fixedChargesByCategory,
   linksByRecurring,
   recurringStatus,
 } from "@/lib/recurring-match";
@@ -223,8 +224,12 @@ export function Dashboard({
   // discarding incoming bookings made a refund raise the reported spend
   // permanently. Salary routes to the income category, which is not
   // budgetable, so it cannot drag a category negative.
+  const budgetPeriod = React.useMemo(
+    () => budgetPeriodOf(anchorDate, state.settings.budgetStartDay),
+    [anchorDate, state.settings.budgetStartDay]
+  );
   const budgetSpent = React.useMemo(() => {
-    const period = budgetPeriodOf(anchorDate, state.settings.budgetStartDay);
+    const period = budgetPeriod;
     const spent = new Map<string, number>();
     for (const transaction of transactions) {
       if (transaction.date < period.start || transaction.date > period.end) continue;
@@ -235,7 +240,14 @@ export function Dashboard({
     // net-positive category has spent nothing, not a negative amount.
     for (const [k, values] of spent) if (values < 0) spent.set(k, 0);
     return spent;
-  }, [transactions, anchorDate, state.settings.budgetStartDay]);
+  }, [transactions, budgetPeriod]);
+  // The recurring charges of the same period, split by what the ledger's
+  // links already show: the budget bars carry these whole instead of
+  // extrapolating them as a daily rate.
+  const fixedCharges = React.useMemo(
+    () => fixedChargesByCategory(state.recurring, transactions, budgetPeriod, anchorDate),
+    [state.recurring, transactions, budgetPeriod, anchorDate]
+  );
 
   const forecast = React.useMemo(
     () =>
@@ -563,7 +575,8 @@ export function Dashboard({
                 period: budgetsMonthLabel(
                   transactions,
                   state.settings.budgetStartDay,
-                  locale
+                  locale,
+                  today
                 ),
               })}
             />
@@ -573,6 +586,8 @@ export function Dashboard({
                   budgets={state.budgets}
                   transactions={transactions}
                   startDay={state.settings.budgetStartDay}
+                  today={today}
+                  fixedByCategory={fixedCharges}
                   disabled={isPending}
                   onAdd={(category, amount) =>
                     run(() => addBudgetAction({ category, amount }))

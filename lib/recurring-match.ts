@@ -385,3 +385,65 @@ export function recurringStatus(
     recognizable: recurring.matchName !== null || recurring.matchIban !== null,
   };
 }
+
+/* ------------------------------------------------------------------------- */
+/*  Fixed charges of a budget period                                          */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * What a category's recurring items cost in one budget period, split by what
+ * the ledger already shows.
+ *
+ * `charged` is inside the period's real spend; `due` is still ahead of the
+ * newest booking (or overdue) and therefore in neither the spend nor the
+ * bookings. A due date before the anchor with no link is treated as charged
+ * when the item has never been confirmed - the safe assumption for an item
+ * the matcher cannot recognize - and as due when it has, because then a
+ * missing booking is real information.
+ */
+export interface FixedCharges {
+  charged: number;
+  due: number;
+  /** Names of the items counted, for the explanation in the UI. */
+  items: string[];
+}
+
+export function fixedChargesByCategory(
+  items: readonly RecurringItem[],
+  transactions: readonly TransactionItem[],
+  period: { start: string; end: string },
+  anchor: string
+): Map<string, FixedCharges> {
+  const links = linksByRecurring(transactions);
+  const out = new Map<string, FixedCharges>();
+  for (const recurring of items) {
+    if (recurring.kind !== "expense" || !recurring.category) continue;
+    if (!isLiveOn(recurring, anchor)) continue;
+    const entry = out.get(recurring.category) ?? { charged: 0, due: 0, items: [] };
+    const own = links.get(recurring.id) ?? [];
+    let counted = false;
+    // Linked bookings count by their booking day, the same way the period's
+    // spend is summed, so `charged` can never exceed what is really spent.
+    for (const link of own) {
+      if (link.date >= period.start && link.date <= period.end && link.amount < 0) {
+        entry.charged += -link.amount;
+        counted = true;
+      }
+    }
+    const recognizable = recurring.matchName !== null || recurring.matchIban !== null;
+    for (const due of dueDatesBetween(recurring, period.start, period.end)) {
+      if (own.some((link) => link.due === due)) continue;
+      if (recurring.skippedDues.includes(due)) continue;
+      counted = true;
+      if (due > anchor || recognizable) entry.due += recurring.amount;
+      else entry.charged += recurring.amount;
+    }
+    if (counted) {
+      entry.charged = Math.round(entry.charged * 100) / 100;
+      entry.due = Math.round(entry.due * 100) / 100;
+      entry.items.push(recurring.name);
+      out.set(recurring.category, entry);
+    }
+  }
+  return out;
+}

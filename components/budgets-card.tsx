@@ -19,13 +19,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ALL_CATEGORIES, categoryByKey, effectiveCategory } from "@/lib/categories";
-import { budgetPeriodOf, daysInWindow } from "@/lib/period";
-import { addMonthsClamped } from "@/lib/projection";
+import { anchorAgeInDays, budgetPeriodOf, daysInWindow } from "@/lib/period";
+import { addMonthsClamped, projectBudgetSpend } from "@/lib/projection";
+import type { FixedCharges } from "@/lib/recurring-match";
 import type { BudgetItem, TransactionItem } from "@/lib/types";
 import { DEFAULT_LOCALE, intlLocale, type Locale } from "@/lib/locale";
 import { useCategoryLabel } from "@/lib/use-category-label";
 import { useFormatters } from "@/lib/use-formatters";
-import { cn, formatDate as formatDateIn, todayIso } from "@/lib/utils";
+import { cn, formatDate as formatDateIn } from "@/lib/utils";
 
 /**
  * Budgets: a limit per spending category and budget period. The period is the
@@ -38,6 +39,8 @@ export function BudgetsCard({
   budgets,
   transactions,
   startDay,
+  today,
+  fixedByCategory,
   disabled,
   onAdd,
   onUpdate,
@@ -47,6 +50,22 @@ export function BudgetsCard({
   transactions: TransactionItem[];
   /** Day of month (1–28) the budget period begins; 1 = calendar months. */
   startDay: number;
+  /**
+   * Today, computed on the server so SSR and the first client render agree.
+   * Reading the clock here instead would let the server and the browser
+   * disagree across midnight (or across a timezone), and `today` decides
+   * whether whole elements render - the pace block, the staleness note. A
+   * differing element TREE is a hydration mismatch React cannot patch up.
+   */
+  today: string;
+  /**
+   * The category's recurring charges in the reference period, split into
+   * what the ledger already shows and what is still due (see
+   * fixedChargesByCategory). Held out of the pace extrapolation: rent lands
+   * on one day, so dividing it by the days elapsed and multiplying by the
+   * period length invents money.
+   */
+  fixedByCategory: ReadonlyMap<string, FixedCharges>;
   disabled: boolean;
   onAdd: (category: string, amount: number) => void;
   onUpdate: (id: number, amount: number) => void;
@@ -64,14 +83,13 @@ export function BudgetsCard({
   const [openLists, setOpenLists] = React.useState<Set<number>>(() => new Set());
 
   // Reference period: the one containing the newest imported booking.
-  const refDate = transactions[0]?.date ?? todayIso();
+  const refDate = transactions[0]?.date ?? today;
   const period = budgetPeriodOf(refDate, startDay);
   const totalDays = daysInWindow(period.start, period.end);
   // Elapsed days come from the calendar, not from the newest booking. Dividing
   // by the booking's day projected a 1.200 EUR rent debited on day one of the
   // period to 36.000 EUR, and any lag between the last import and today only
   // inflated it further, since that day is always <= today.
-  const today = todayIso();
   const elapsedDays = Math.min(
     totalDays,
     Math.max(1, daysInWindow(period.start, today < period.end ? today : period.end))
@@ -79,6 +97,19 @@ export function BudgetsCard({
   // Under a handful of days the extrapolation is noise, not a projection.
   const MIN_DAYS_FOR_PACE = 5;
   const paceReliable = elapsedDays >= MIN_DAYS_FOR_PACE;
+  // Spend stops at the newest booking while the days above run to today, so a
+  // lagging import counts the gap as days on which nothing was spent and every
+  // projection falls. That is the safe direction, but it has to be visible:
+  // otherwise a halved projection reads as a month that is going well.
+  const dataLagDays = transactions.length
+    ? anchorAgeInDays(refDate, today)
+    : 0;
+  const dataIsStale = dataLagDays > 7;
+  // Only the days inside the period count against the projection: a lag that
+  // runs past the period's end leaves the bar for a finished period as it is.
+  const missingDays = dataIsStale
+    ? Math.max(0, daysInWindow(refDate, today < period.end ? today : period.end) - 1)
+    : 0;
 
   const { spentByCat, avgByCat, comparableMonths } = React.useMemo(() => {
     const spent = new Map<string, number>();
@@ -177,13 +208,29 @@ export function BudgetsCard({
 
   return (
     <div className="space-y-4">
+      {budgets.length > 0 && dataIsStale && (
+        <p className="text-xs text-muted-foreground">
+          {missingDays > 0
+            ? msg("staleData", { date: formatDate(refDate), days: missingDays })
+            : msg("staleDataPeriodOver", { date: formatDate(refDate) })}
+        </p>
+      )}
       {budgets.length > 0 && (
         <div className="space-y-4">
           {budgets.map((budget) => {
             const categoryInfo = categoryByKey(budget.category);
             const spent = spentByCat.get(budget.category) ?? 0;
-            const perDay = spent / elapsedDays;
-            const projected = perDay * totalDays;
+            // Fixed charges are carried whole, never extrapolated: a 1.200 EUR
+            // rent debited on day one of the period is a fact about the month,
+            // not a rate of 240 EUR a day. Only what is left over accrues.
+            const charges =
+              fixedByCategory.get(budget.category) ?? { charged: 0, due: 0, items: [] };
+            const { fixed, variable, perDay, projected } = projectBudgetSpend(
+              spent,
+              charges,
+              elapsedDays,
+              totalDays
+            );
             const avg = avgByCat.get(budget.category) ?? 0;
             const over = spent > budget.amount;
             const projectedOver = paceReliable && projected > budget.amount;
@@ -244,7 +291,7 @@ export function BudgetsCard({
                             : `var(${categoryInfo.cssVar})`,
                         }}
                       />
-                      {spent > 0 && paceReliable && (
+                      {projected > 0 && paceReliable && (
                         <div
                           className="absolute inset-y-0 w-0.5 -translate-x-1/2 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)] transition-all"
                           style={{ left: `${projectedPct}%` }}
@@ -299,9 +346,26 @@ export function BudgetsCard({
                               {formatEuro(projected)}
                             </dd>
                           </div>
+                          {fixed > 0 && (
+                            <>
+                              <div className="flex justify-between gap-3">
+                                <dt className="text-muted-foreground">
+                                  {msg("fixedShare")}
+                                </dt>
+                                <dd className="font-mono tabular-nums">
+                                  {formatEuro(fixed)}
+                                </dd>
+                              </div>
+                              <div className="text-muted-foreground">
+                                {msg("fixedItems", { names: charges.items.join(", ") })}
+                                {charges.due > 0 &&
+                                  msg("fixedStillDue", { amount: formatEuro(charges.due) })}
+                              </div>
+                            </>
+                          )}
                           <div className="flex justify-between gap-3">
                             <dt className="text-muted-foreground">
-                              Kommt bei diesem Tempo noch dazu
+                              {msg("stillToCome")}
                             </dt>
                             <dd className="font-mono tabular-nums">
                               {formatEuro(Math.max(0, projected - spent))}
@@ -352,7 +416,7 @@ export function BudgetsCard({
                   ) : (
                     <>{msg("tooFewDays")}</>
                   )}
-                  {spent > 0 && paceReliable && (
+                  {variable > 0 && paceReliable && (
                     <>
                       {msg("perDay")}
                       <span className="font-mono tabular-nums">
@@ -507,9 +571,11 @@ function BudgetItemsPanel({
 export function budgetsMonthLabel(
   transactions: TransactionItem[],
   startDay: number,
-  locale: Locale = DEFAULT_LOCALE
+  locale: Locale = DEFAULT_LOCALE,
+  /** Passed in, never read from the clock: this renders during hydration. */
+  today: string
 ): string {
-  const refDate = transactions[0]?.date ?? todayIso();
+  const refDate = transactions[0]?.date ?? today;
   if (startDay <= 1) {
     return new Intl.DateTimeFormat(intlLocale(locale), {
       month: "long",

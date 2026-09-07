@@ -10,6 +10,7 @@ import {
   computeSummary,
   dailyActualBalances,
   effectiveRemaining,
+  projectBudgetSpend,
   type DailyPoint,
 } from "../lib/projection";
 import type {
@@ -1194,5 +1195,54 @@ describe("computeMonthlyCost reconciles with its own breakdown", () => {
     );
     expect(cost.items.map((item) => item.name)).toEqual(["Gehalt"]);
     expect(hoverNet(cost)).toBe(cost.summary.monthlyNet);
+  });
+});
+
+/* ------------------------------------------------------------------------- */
+/*  Budget pace: fixed charges are carried, not extrapolated                 */
+/* ------------------------------------------------------------------------- */
+
+describe("projectBudgetSpend", () => {
+  it("carries a fixed charge whole instead of treating it as a daily rate", () => {
+    // 1.200 rent debited on day one, day 5 of 30. Extrapolating it gave 7.200.
+    const pace = projectBudgetSpend(1200, { charged: 1200, due: 0 }, 5, 30);
+    expect(pace.variable).toBe(0);
+    expect(pace.perDay).toBe(0);
+    expect(pace.projected).toBe(1200);
+  });
+
+  it("extrapolates only what is spent beyond the fixed charge", () => {
+    const pace = projectBudgetSpend(1000, { charged: 900, due: 0 }, 10, 30);
+    expect(pace.variable).toBe(100);
+    expect(pace.perDay).toBe(10);
+    expect(pace.projected).toBe(1200);
+  });
+
+  it("extrapolates variable spend even before the rent lands", () => {
+    // Rent due on the 28th, day 10, 100 of other Wohnen spend: the 100 must
+    // not be mistaken for part of the rent.
+    const pace = projectBudgetSpend(100, { charged: 0, due: 900 }, 10, 30);
+    expect(pace.variable).toBe(100);
+    expect(pace.projected).toBe(1200);
+  });
+
+  it("carries a yearly premium whole in the period it is debited", () => {
+    const pace = projectBudgetSpend(600, { charged: 600, due: 0 }, 5, 30);
+    expect(pace.variable).toBe(0);
+    expect(pace.projected).toBe(600);
+  });
+
+  it("counts a fixed charge that is still due", () => {
+    expect(projectBudgetSpend(0, { charged: 0, due: 900 }, 5, 30).projected).toBe(900);
+  });
+
+  it("is the plain daily rate for a category with no fixed items", () => {
+    const pace = projectBudgetSpend(150, { charged: 0, due: 0 }, 10, 30);
+    expect(pace.perDay).toBe(15);
+    expect(pace.projected).toBe(450);
+  });
+
+  it("never divides by zero elapsed days", () => {
+    expect(projectBudgetSpend(50, { charged: 0, due: 0 }, 0, 30).projected).toBe(1500);
   });
 });
