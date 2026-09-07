@@ -381,6 +381,7 @@
     "claudeUnexpectedResponse": "Unexpected response from the Claude CLI.",
     "claudeUnexpectedResponseDetail": "Unexpected response from the Claude CLI. Details: {detail}",
     "claudeCliReportedError": "Claude reported an error ({subtype}).",
+    "claudeCliReportedErrorDetail": "Claude reported an error ({subtype}): {detail}",
     "claudeUnknownSubtype": "unknown",
     "groupsPrepared": "{groups} merchant groups prepared from {bookings} bookings",
     "suggestionsFound": "{count} suggestions found",

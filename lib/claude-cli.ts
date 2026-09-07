@@ -25,7 +25,8 @@ export type ClaudeError =
   | { code: "cliStartFailed"; detail: string }
   /** No result envelope on stdout; `detail` is stderr, empty when it was silent. */
   | { code: "unexpectedResponse"; detail: string }
-  | { code: "cliReportedError"; subtype: string | null };
+  /** `detail` is the CLI's own wording of what went wrong, when it gave one. */
+  | { code: "cliReportedError"; subtype: string | null; detail: string };
 
 /**
  * Split on `ok` so a failure always carries a reason and a success always
@@ -46,14 +47,64 @@ export interface ClaudeProgress {
   chars: number;
 }
 
-interface StreamLine {
+export interface StreamLine {
   type?: string;
   subtype?: string;
   is_error?: boolean;
-  result?: string;
+  result?: unknown;
   event?: {
     type?: string;
     delta?: { type?: string; text?: string; thinking?: string };
+  };
+}
+
+/**
+ * Variables a running Claude Code session hands to its children. The app
+ * server inherits them when it is started from a terminal inside Claude Code
+ * or the desktop app, and a `claude -p` spawned with them attaches to that
+ * session instead of running on its own. The CLI strips the same set before
+ * spawning its own subprocesses.
+ */
+const SESSION_MARKERS =
+  /^(CLAUDECODE|CLAUDE_PID|CLAUDE_CODE_(SESSION_ID|CHILD_SESSION|HOST_SESSION_ID|BRIDGE_SESSION_ID|ENTRYPOINT|EXECPATH|MESSAGING_SOCKET|MESSAGING_TOKEN))$/;
+
+export function childEnv(env: Record<string, string | undefined>): NodeJS.ProcessEnv {
+  // Next types NODE_ENV as required on ProcessEnv; the filter never drops it.
+  return Object.fromEntries(
+    Object.entries(env).filter(([name]) => !SESSION_MARKERS.test(name))
+  ) as NodeJS.ProcessEnv;
+}
+
+/**
+ * Turn the result envelope into the run's outcome. On an error the CLI puts
+ * its own wording into `result` (an API error, for instance) while
+ * `subtype` may still say "success", so the text is what the user needs to
+ * see. A success without a `result` string has been observed too; the
+ * answer streamed past in the deltas, so that text is used before giving up.
+ */
+export function interpretResult(
+  envelope: StreamLine,
+  streamedText: string
+): ClaudeRunResult {
+  const text = typeof envelope.result === "string" ? envelope.result : null;
+  if (envelope.is_error) {
+    return {
+      ok: false,
+      error: {
+        code: "cliReportedError",
+        subtype: envelope.subtype ?? null,
+        detail: (text ?? "").trim().slice(0, 300),
+      },
+    };
+  }
+  if (text !== null) return { ok: true, text };
+  if (streamedText) return { ok: true, text: streamedText };
+  return {
+    ok: false,
+    error: {
+      code: "unexpectedResponse",
+      detail: `result envelope without text (subtype ${envelope.subtype ?? "none"})`,
+    },
   };
 }
 
@@ -93,9 +144,9 @@ export function runClaude(
           spawn(["claude", ...args].map((arg) => `"${arg}"`).join(" "), {
             shell: true,
             windowsHide: true,
-            env: process.env,
+            env: childEnv(process.env),
           })
-        : spawn("claude", args, { env: process.env });
+        : spawn("claude", args, { env: childEnv(process.env) });
 
     const timer = setTimeout(() => {
       child.kill();
@@ -108,7 +159,7 @@ export function runClaude(
     let buffer = "";
     let stderr = "";
     let envelope: StreamLine | null = null;
-    let textChars = 0;
+    let streamedText = "";
     let thinkingChars = 0;
     let reportedChars = -1;
     let announcedStart = false;
@@ -143,12 +194,12 @@ export function runClaude(
       ) {
         const delta = parsed.event.delta;
         if (delta?.type === "text_delta") {
-          textChars += delta.text?.length ?? 0;
-          report("writing", textChars);
+          streamedText += delta.text ?? "";
+          report("writing", streamedText.length);
         } else if (delta?.type === "thinking_delta") {
           thinkingChars += delta.thinking?.length ?? 0;
           // Answer text takes over the progress line once it starts flowing.
-          if (textChars === 0) report("thinking", thinkingChars);
+          if (!streamedText) report("thinking", thinkingChars);
         }
       } else if (parsed.type === "result") {
         envelope = parsed;
@@ -190,14 +241,7 @@ export function runClaude(
         return;
       }
       const env: StreamLine = envelope;
-      if (env.is_error || typeof env.result !== "string") {
-        done({
-          ok: false,
-          error: { code: "cliReportedError", subtype: env.subtype ?? null },
-        });
-        return;
-      }
-      done({ ok: true, text: env.result });
+      done(interpretResult(env, streamedText));
     });
 
     child.stdin.on("error", () => {

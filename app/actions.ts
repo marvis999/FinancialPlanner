@@ -956,10 +956,12 @@ function claudeErrorMessage(msg: ServerT, error: ClaudeError): string {
       return error.detail
         ? msg("claudeUnexpectedResponseDetail", { detail: error.detail })
         : msg("claudeUnexpectedResponse");
-    case "cliReportedError":
-      return msg("claudeCliReportedError", {
-        subtype: error.subtype ?? msg("claudeUnknownSubtype"),
-      });
+    case "cliReportedError": {
+      const subtype = error.subtype ?? msg("claudeUnknownSubtype");
+      return error.detail
+        ? msg("claudeCliReportedErrorDetail", { subtype, detail: error.detail })
+        : msg("claudeCliReportedError", { subtype });
+    }
   }
 }
 
