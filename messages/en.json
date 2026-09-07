@@ -246,6 +246,7 @@
     "importCsv": "Import CSV",
     "reviewSummary": "{newCount, plural, one {# new booking} other {# new bookings}} from {from} to {to}, {duplicates} already present. Nothing has been imported yet.",
     "claudeFailedNote": "Claude check failed: {error} Category suggestions are missing. The recurring matches below do not depend on Claude.",
+    "claudeSignInHint": "After signing in, cancel this upload and upload the file again so the check runs.",
     "claudeChecked": "Claude checked {checked} of {total} new bookings.",
     "expectedTitle": "Expected, but not in the file",
     "expectedDescription": "Recurring items due within the file's span for which no booking was recognized. Assign a booking or skip the date.",

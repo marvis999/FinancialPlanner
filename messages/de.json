@@ -246,6 +246,7 @@
     "importCsv": "CSV importieren",
     "reviewSummary": "{newCount, plural, one {# neuer Umsatz} other {# neue Umsätze}} vom {from} bis {to}, {duplicates} bereits vorhanden. Noch wurde nichts importiert.",
     "claudeFailedNote": "Claude-Prüfung fehlgeschlagen: {error} Kategorie-Vorschläge fehlen. Die Zuordnung der laufenden Posten unten kommt ohne Claude aus.",
+    "claudeSignInHint": "Nach der Anmeldung diesen Upload abbrechen und die Datei erneut hochladen, damit die Prüfung läuft.",
     "claudeChecked": "Claude hat {checked} von {total} neuen Umsätzen geprüft.",
     "expectedTitle": "Erwartet, aber nicht in der Datei",
     "expectedDescription": "Fällige laufende Posten im Zeitraum der Datei, für die kein Umsatz erkannt wurde. Ordne einen Umsatz zu oder überspringe den Termin.",

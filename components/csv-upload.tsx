@@ -49,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ClaudeLoginCard } from "@/components/claude-login";
 import { categoryByKey } from "@/lib/categories";
 import { dayDiff, settledKey } from "@/lib/recurring-match";
 import type {
@@ -832,6 +833,12 @@ function ReviewDialog({
               : msg("claudeChecked", { checked, total: summary.bookings.length })}
           </span>
         </p>
+        {claudeError && (
+          <div className="space-y-1.5">
+            <ClaudeLoginCard embedded disabled={busy} />
+            <p className="text-xs text-muted-foreground">{msg("claudeSignInHint")}</p>
+          </div>
+        )}
 
         <div className="max-h-[60vh] space-y-4 overflow-auto pr-1">
           {/* ---------------- Expected, but not in the file ---------------- */}

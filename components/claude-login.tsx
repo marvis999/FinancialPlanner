@@ -21,7 +21,14 @@ import type { ClaudeAuthStatus } from "@/lib/types";
  * open the link it prints, paste the code the page shows. The status line is
  * read from `claude auth status` on mount and after every attempt.
  */
-export function ClaudeLoginCard({ disabled }: { disabled: boolean }) {
+export function ClaudeLoginCard({
+  disabled,
+  embedded = false,
+}: {
+  disabled: boolean;
+  /** Inside the import review the dialog is the frame: no heading, no card. */
+  embedded?: boolean;
+}) {
   const msg = useTranslations("claudeLogin");
   const msgCommon = useTranslations("common");
   // undefined = not checked yet, null = the CLI could not be asked.
@@ -97,11 +104,8 @@ export function ClaudeLoginCard({ disabled }: { disabled: boolean }) {
       </span>
     );
 
-  return (
-    <section>
-      <SectionHeading title={msg("title")} description={msg("description")} />
-      <Card>
-        <CardContent className="space-y-3 pt-6">
+  const body = (
+    <>
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
             {statusLine}
             <div className="flex gap-2">
@@ -152,7 +156,15 @@ export function ClaudeLoginCard({ disabled }: { disabled: boolean }) {
           {error && (
             <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
           )}
-        </CardContent>
+    </>
+  );
+  return embedded ? (
+    <div className="space-y-3 rounded-lg border px-4 py-3">{body}</div>
+  ) : (
+    <section>
+      <SectionHeading title={msg("title")} description={msg("description")} />
+      <Card>
+        <CardContent className="space-y-3 pt-6">{body}</CardContent>
       </Card>
     </section>
   );
