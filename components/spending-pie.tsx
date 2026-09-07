@@ -322,7 +322,7 @@ export function SpendingPie({
       ) : (
         <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
           <div className="relative h-[240px] w-[240px] shrink-0">
-            <ChartContainer config={{}} className="aspect-square h-full w-full">
+            <ChartContainer id="spending" config={{}} className="aspect-square h-full w-full">
               <PieChart>
                 {/* Above the centered sum overlay, which follows in DOM order
                     and would otherwise paint over the tooltip. */}

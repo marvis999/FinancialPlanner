@@ -358,6 +358,13 @@ export function BalanceChart({
         )}
       >
         <ChartContainer
+          /*
+           * A fixed id, not the React.useId() fallback: ChartContainer scopes
+           * its `--color-*` variables to `[data-chart=<id>]`, so the attribute
+           * and the style block must agree, and useId only agrees between
+           * server and client while the component trees match exactly.
+           */
+          id="balance"
           config={chartConfig}
           className="aspect-auto h-[340px] w-full"
         >

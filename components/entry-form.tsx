@@ -100,7 +100,7 @@ export { todayIso };
  * in another zone would put two different dates in the initial HTML and the
  * first client render - a hydration mismatch.
  */
-export function emptyEntry(today: string = todayIso()): EntryValues {
+export function emptyEntry(today: string): EntryValues {
   return {
     name: "",
     amount: "",
