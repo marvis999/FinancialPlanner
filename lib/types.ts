@@ -141,6 +141,12 @@ export interface FreeAnalysisState extends AnalysisJobInfo {
 }
 
 /** Combined state of both analysis jobs, polled by the Analyse tab. */
+/** Whether the Claude CLI on the server is signed in, from `claude auth status`. */
+export interface ClaudeAuthStatus {
+  loggedIn: boolean;
+  email: string | null;
+}
+
 export interface AnalysisState {
   categories: CategoryAnalysisState;
   free: FreeAnalysisState;

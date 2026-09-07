@@ -107,6 +107,12 @@ docker compose -f docker-compose.yml -f docker-compose.claude.yml up --build
 This shares the host's Claude Code login with the container. Without it the app
 runs normally and only those two features are unavailable.
 
+The Analysis tab also has a sign-in button: it runs `claude auth login` on the
+server, shows the sign-in link, and takes the code from that page. With the
+overlay the sign-in lands in the mounted `.claude` folder and the host CLI
+shares it; without the overlay it lives inside the container and is gone once
+the container is recreated.
+
 ## Development
 
 Needs Node.js 22 and build tools for native modules (better-sqlite3).

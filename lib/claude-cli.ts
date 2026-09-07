@@ -1,6 +1,6 @@
 import "server-only";
 
-import { spawn } from "child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 
 /**
  * Headless bridge to the locally installed Claude Code CLI (`claude -p`).
@@ -108,6 +108,22 @@ export function interpretResult(
   };
 }
 
+/** Start the CLI with fixed literal arguments; anything variable goes via stdin. */
+export function spawnClaude(args: string[]): ChildProcessWithoutNullStreams {
+  return process.platform === "win32"
+    ? // Windows resolves the `claude` shim only through a shell; a single
+      // command string avoids DEP0190 (shell + args array). Every argument is
+      // quoted because a bare join drops `--tools ""` entirely: an empty
+      // string contributes nothing between two spaces, and the flag would
+      // silently lose its value.
+      spawn(["claude", ...args].map((arg) => `"${arg}"`).join(" "), {
+        shell: true,
+        windowsHide: true,
+        env: childEnv(process.env),
+      })
+    : spawn("claude", args, { env: childEnv(process.env) });
+}
+
 export function runClaude(
   prompt: string,
   opts: { timeoutMs?: number; onProgress?: (p: ClaudeProgress) => void } = {}
@@ -134,19 +150,7 @@ export function runClaude(
       "--tools", "",
       "--strict-mcp-config",
     ];
-    const child =
-      process.platform === "win32"
-        ? // Windows resolves the `claude` shim only through a shell; a single
-          // command string avoids DEP0190 (shell + args array). Every argument
-          // is quoted because a bare join drops `--tools ""` entirely — an
-          // empty string contributes nothing between two spaces, and the flag
-          // would silently lose its value.
-          spawn(["claude", ...args].map((arg) => `"${arg}"`).join(" "), {
-            shell: true,
-            windowsHide: true,
-            env: childEnv(process.env),
-          })
-        : spawn("claude", args, { env: childEnv(process.env) });
+    const child = spawnClaude(args);
 
     const timer = setTimeout(() => {
       child.kill();

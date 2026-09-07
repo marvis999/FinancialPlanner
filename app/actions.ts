@@ -33,6 +33,12 @@ import {
   settledKey,
   type MatchCandidate,
 } from "@/lib/recurring-match";
+import {
+  cancelClaudeLogin,
+  claudeAuthStatus,
+  finishClaudeLogin,
+  startClaudeLogin,
+} from "@/lib/claude-auth";
 import { todayIso } from "@/lib/utils";
 import { looksLikeUmsatzCsv, parseCsvTransactions } from "@/lib/csv-import";
 import type {
@@ -41,6 +47,7 @@ import type {
   AppState,
   CategoryAnalysisState,
   CategorySuggestion,
+  ClaudeAuthStatus,
   FreeAnalysisState,
   ImportCheckResult,
   ImportCheckState,
@@ -868,6 +875,58 @@ export async function relinkRecurringAction(): Promise<
 > {
   const linked = db.relinkRecurring();
   return { ok: true, linked, ...snapshot() };
+}
+
+// ---------------------------------------------------------------------------
+// Claude CLI sign-in (the CLI on the server holds the account login)
+// ---------------------------------------------------------------------------
+
+export interface ClaudeAuthResponse {
+  status: ClaudeAuthStatus | null;
+  error: string | null;
+}
+
+export async function getClaudeAuthAction(): Promise<ClaudeAuthResponse> {
+  const msg = await getTranslations("server");
+  const status = await claudeAuthStatus();
+  return status
+    ? { status, error: null }
+    : { status: null, error: msg("claudeCliNotFound") };
+}
+
+/** Start `claude auth login` and hand back the sign-in link it prints. */
+export async function startClaudeLoginAction(): Promise<{
+  url: string | null;
+  error: string | null;
+}> {
+  const msg = await getTranslations("server");
+  const started = await startClaudeLogin();
+  if ("url" in started) return { url: started.url, error: null };
+  return {
+    url: null,
+    error:
+      started.error === "cliNotFound"
+        ? msg("claudeCliNotFound")
+        : msg("loginNoUrl", { detail: started.detail }),
+  };
+}
+
+/** Paste the code from the sign-in page into the waiting CLI. */
+export async function finishClaudeLoginAction(code: string): Promise<ClaudeAuthResponse> {
+  const msg = await getTranslations("server");
+  const outcome = await finishClaudeLogin(String(code).slice(0, 500));
+  if (outcome.ok) return { status: outcome.status, error: null };
+  const wording = {
+    noLogin: () => msg("loginNotStarted"),
+    invalidCode: () => msg("loginInvalidCode"),
+    timeout: () => msg("loginTimeout"),
+    exited: () => msg("loginFailed", { detail: outcome.detail }),
+  };
+  return { status: null, error: wording[outcome.error]() };
+}
+
+export async function cancelClaudeLoginAction(): Promise<void> {
+  cancelClaudeLogin();
 }
 
 // ---------------------------------------------------------------------------

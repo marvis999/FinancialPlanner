@@ -9,6 +9,7 @@ import {
   startFreeAnalysisAction,
 } from "@/app/actions";
 import { JobProgress } from "@/components/analysis-job";
+import { ClaudeLoginCard } from "@/components/claude-login";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -70,6 +71,8 @@ export function AnalysisTab({ disabled }: { disabled: boolean }) {
   }
 
   return (
+    <>
+    <ClaudeLoginCard disabled={disabled} />
     <section>
       <SectionHeading
         title={msg("freeTitle")}
@@ -121,5 +124,6 @@ export function AnalysisTab({ disabled }: { disabled: boolean }) {
         </CardContent>
       </Card>
     </section>
+    </>
   );
 }
