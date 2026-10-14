@@ -1,0 +1,3 @@
+[tools]
+# better-sqlite3 11 does not build on newer Node; matches the Dockerfile.
+node = "22"

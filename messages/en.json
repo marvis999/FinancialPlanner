@@ -276,7 +276,12 @@
     "doneMissingHint": "These dates stay marked as open in the Recurring tab."
   },
   "dashboard": {
-    "subtitle": "Manage spending and see your balance over time.",
+    "navLabel": "Main",
+    "navNow": "Now",
+    "navPlan": "Plan",
+    "navAsk": "Ask Claude",
+    "navSettings": "Settings",
+    "navImport": "Import",
     "currentBalance": "Current balance",
     "asOf": "As of {date}",
     "divergesFromLedger": "Diverges from the ledger ({balance} on {date})",

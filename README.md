@@ -5,8 +5,8 @@ spending into categories, and see where the balance is heading. Recurring
 items, one-off payments and budgets all booked on the day they are actually
 due.
 
-![The overview tab: a balance chart splitting imported history from the
-forecast, above the budget bars](docs/screenshot.png)
+![The Now view: monthly figures above a balance chart that splits imported
+history from the forecast](docs/screenshot.png)
 
 
 ## Stack
@@ -50,11 +50,10 @@ forecast, above the budget bars](docs/screenshot.png)
 
 - The forecast and budget maths are covered by an automated test suite, but
   have not been reconciled by hand against real bank statements
-- The interface is built for desktop. At phone widths the balance chart does
-  not render and the tab bar overflows its container
+- The interface is built for desktop. It fits phone widths, but some rows are
+  cramped there: budget names are cut off
 - There is no hosted demo; it runs locally or in Docker
-- Only tested on Windows with Docker Desktop. The compose setup avoids
-  platform-specific paths but has not been run on macOS or Linux
+- Tested on Windows with Docker Desktop and on Linux. Not tested on macOS
 - No support for multiple bank accounts
 - Currently only supports one CSV format: the German Sparkassen "Umsatz"
   export (semicolon-separated, Windows-1252, with `Buchungstag` and `Betrag`
@@ -112,6 +111,30 @@ server, shows the sign-in link, and takes the code from that page. With the
 overlay the sign-in lands in the mounted `.claude` folder and the host CLI
 shares it; without the overlay it lives inside the container and is gone once
 the container is recreated.
+
+## Running as a desktop app on Linux
+
+Instead of Docker, the app can run as a systemd user service with a launcher
+in your app menu:
+
+```bash
+npm run app:install
+```
+
+This installs the dependencies, builds the app, installs and starts the
+`financial-planner` user service on http://127.0.0.1:3210, and, where the
+desktop offers web app launchers, adds a "Financial Planner" entry to the app
+menu. Run it again after every update; it rebuilds and restarts. It uses the same `./data` folder as the dev server.
+
+Stop the dev server and the Docker container first: all three use port 3210,
+and the build overwrites the `.next` folder the dev server reads. The Claude
+features use the `claude` CLI from your mise shims and its existing login.
+
+```bash
+systemctl --user status financial-planner     # is it running?
+journalctl --user -u financial-planner -f     # logs
+rm ~/.local/share/applications/"Financial Planner.desktop"   # remove the launcher
+```
 
 ## Development
 

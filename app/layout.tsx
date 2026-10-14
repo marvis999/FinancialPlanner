@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Bricolage_Grotesque, Geist } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 
@@ -11,6 +12,14 @@ export async function generateMetadata(): Promise<Metadata> {
     description: t("description"),
   };
 }
+
+// Self-hosted by next/font at build time, so the running app makes no font requests.
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: "800",
+  variable: "--font-bricolage",
+});
 
 // Applied before paint to avoid a flash of the wrong theme.
 const themeScript = `
@@ -36,7 +45,11 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html
+      lang={locale}
+      className={`${geist.variable} ${bricolage.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

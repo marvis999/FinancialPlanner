@@ -35,6 +35,7 @@ import {
   type CsvImportResponse,
 } from "@/app/actions";
 import { AnalysisTab } from "@/components/analysis-tab";
+import { AppHeader, PlanNav, useView } from "@/components/app-header";
 import { useCategorySuggestions } from "@/components/category-suggestions";
 import { BalanceChart } from "@/components/balance-chart";
 import { BrokeTraceDialog } from "@/components/broke-trace-dialog";
@@ -68,7 +69,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { effectiveCategory } from "@/lib/categories";
 import {
   anchorAgeInDays,
@@ -122,8 +122,6 @@ export function Dashboard({
   const msg = useTranslations("dashboard");
   const msgCommon = useTranslations("common");
   const msgStatus = useTranslations("recurringStatus");
-  // Same key as the browser tab, so the two names cannot drift apart.
-  const msgMeta = useTranslations("meta");
   const {
     formatEuro,
     formatDate,
@@ -131,6 +129,7 @@ export function Dashboard({
     formatAmountInput,
     locale,
   } = useFormatters();
+  const [view, setView] = useView();
   const [state, setState] = React.useState<AppState>(initialState);
   const [transactions, setTransactions] = React.useState(initialTransactions);
   const [isPending, startTransition] = React.useTransition();
@@ -408,29 +407,19 @@ export function Dashboard({
   const oneoffInit = React.useMemo(() => emptyEntry(today), [today]);
 
   return (
+    <>
+    <AppHeader
+      view={view}
+      onNavigate={setView}
+      bookingsCount={transactions.length}
+    />
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:py-10">
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow">
-            <Wallet className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{msgMeta("title")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {msg("subtitle")}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <LanguageSwitcher />
-          <ThemeToggle />
-        </div>
-      </header>
 
+      {view === "now" && (
       <section className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label={msg("currentBalance")}
-          value={formatEuro(state.settings.startingBalance)}
+          value={state.settings.startingBalance}
           icon={<Wallet className="h-4 w-4" />}
           note={
             hasHistory
@@ -446,42 +435,29 @@ export function Dashboard({
         />
         <StatCard
           label={msg("incomePerMonth")}
-          value={formatEuro(summary.monthlyIncome)}
+          value={summary.monthlyIncome}
           icon={<ArrowUpRight className="h-4 w-4" />}
           accent="income"
         />
         <StatCard
           label={msg("expensePerMonth")}
-          value={formatEuro(summary.monthlyExpense)}
+          value={summary.monthlyExpense}
           icon={<ArrowDownRight className="h-4 w-4" />}
           accent="expense"
         />
         <StatCard
           label={msg("netPerMonth")}
-          value={formatEuro(summary.monthlyNet)}
+          value={summary.monthlyNet}
           icon={<TrendingUp className="h-4 w-4" />}
           accent={summary.monthlyNet >= 0 ? "income" : "expense"}
         />
       </section>
+      )}
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5">
-          <TabsTrigger value="overview">{msg("tabOverview")}</TabsTrigger>
-          <TabsTrigger value="monthly">{msg("tabRecurring")}</TabsTrigger>
-          <TabsTrigger value="oneoff">{msg("tabOneOff")}</TabsTrigger>
-          <TabsTrigger value="transactions">
-            {msg("tabTransactions")}
-            {transactions.length > 0 && (
-              <span className="ml-1.5 hidden rounded bg-muted-foreground/15 px-1.5 text-xs tabular-nums sm:inline">
-                {transactions.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="analysis">{msg("tabAnalysis")}</TabsTrigger>
-        </TabsList>
 
         {/* ---------------------------- Overview ---------------------------- */}
-        <TabsContent value="overview" className="space-y-6">
+        {view === "now" && (
+        <div className="space-y-6">
           <section>
             <SectionHeading
               title={msg("chartTitle")}
@@ -645,16 +621,13 @@ export function Dashboard({
             </section>
           )}
 
-          <SettingsCard
-            state={state}
-            run={run}
-            disabled={isPending}
-            hasHistory={hasHistory}
-          />
-        </TabsContent>
+        </div>
+        )}
 
         {/* ------------------------- Recurring ------------------------------ */}
-        <TabsContent value="monthly" className="space-y-6">
+        {view === "plan-recurring" && (
+        <div className="space-y-6">
+          <PlanNav view={view} onNavigate={setView} />
           <section>
             <SectionHeading
               title={msg("addRecurringTitle")}
@@ -793,10 +766,13 @@ export function Dashboard({
               </CardContent>
             </Card>
           </section>
-        </TabsContent>
+        </div>
+        )}
 
         {/* -------------------------- One-off ------------------------------- */}
-        <TabsContent value="oneoff" className="space-y-6">
+        {view === "plan-oneoff" && (
+        <div className="space-y-6">
+          <PlanNav view={view} onNavigate={setView} />
           <section>
             <SectionHeading
               title={msg("addOneOffTitle")}
@@ -866,10 +842,12 @@ export function Dashboard({
               </CardContent>
             </Card>
           </section>
-        </TabsContent>
+        </div>
+        )}
 
         {/* --------------------------- Transactions ------------------------- */}
-        <TabsContent value="transactions" className="space-y-6">
+        {view === "bookings" && (
+        <div className="space-y-6">
           <section>
             <SectionHeading
               title={msg("transactionsTitle")}
@@ -920,13 +898,31 @@ export function Dashboard({
               </CardContent>
             </Card>
           </section>
-        </TabsContent>
+        </div>
+        )}
 
         {/* --------------------------- Claude analysis ---------------------- */}
-        <TabsContent value="analysis" className="space-y-6">
+        {view === "ask" && (
+        <div className="space-y-6">
           <AnalysisTab disabled={isPending} />
-        </TabsContent>
-      </Tabs>
+        </div>
+        )}
+
+        {/* ---------------------------- Settings ---------------------------- */}
+        {view === "settings" && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <ThemeToggle />
+          </div>
+          <SettingsCard
+            state={state}
+            run={run}
+            disabled={isPending}
+            hasHistory={hasHistory}
+          />
+        </div>
+        )}
 
       {assigning !== null && (
         <AssignBookingDialog
@@ -1036,5 +1032,6 @@ export function Dashboard({
         </Dialog>
       )}
     </div>
+    </>
   );
 }
