@@ -276,7 +276,12 @@
     "doneMissingHint": "Diese Termine bleiben im Tab „Laufend“ als offen markiert."
   },
   "dashboard": {
-    "subtitle": "Ausgaben verwalten und den Kontostand über die Zeit sehen.",
+    "navLabel": "Hauptmenü",
+    "navNow": "Jetzt",
+    "navPlan": "Planung",
+    "navAsk": "Claude fragen",
+    "navSettings": "Einstellungen",
+    "navImport": "Importieren",
     "currentBalance": "Aktuelles Guthaben",
     "asOf": "Stand {date}",
     "divergesFromLedger": "Weicht vom Kontobuch ab ({balance} am {date})",

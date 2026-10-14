@@ -35,6 +35,34 @@ export function formatEuro(value: number, locale: Locale = DEFAULT_LOCALE): stri
 }
 
 /**
+ * A EUR amount split into the currency sign and the rest, in the locale's
+ * order: "€" leads in English and trails in German, so a caller that styles
+ * the sign separately cannot just prepend it. The space between number and
+ * sign is dropped; the caller spaces the sign itself.
+ */
+export function euroParts(
+  value: number,
+  locale: Locale = DEFAULT_LOCALE
+): { text: string; currency: boolean }[] {
+  const tag = intlLocale(locale);
+  const parts = cached(
+    `euro:${tag}`,
+    () => new Intl.NumberFormat(tag, { style: "currency", currency: "EUR" })
+  ).formatToParts(value);
+  const segments: { text: string; currency: boolean }[] = [];
+  parts.forEach((part, index) => {
+    const nextToSign =
+      parts[index - 1]?.type === "currency" || parts[index + 1]?.type === "currency";
+    if (part.type === "literal" && nextToSign && part.value.trim() === "") return;
+    const currency = part.type === "currency";
+    const last = segments[segments.length - 1];
+    if (last && !last.currency && !currency) last.text += part.value;
+    else segments.push({ text: part.value, currency });
+  });
+  return segments;
+}
+
+/**
  * Local calendar day of a Date, as "YYYY-MM-DD". toISOString() would give the
  * UTC day, which in Germany is the PREVIOUS day between midnight and 02:00 -
  * long enough for a Restschuld entered just after midnight to be stamped with

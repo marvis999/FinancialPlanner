@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import { cn } from "@/lib/utils";
 
 export function StatCard({
@@ -14,7 +15,7 @@ export function StatCard({
   noteTone,
 }: {
   label: string;
-  value: string;
+  value: number;
   icon: React.ReactNode;
   accent?: "income" | "expense";
   /** Small line under the value: as-of date, warning, unit. */
@@ -37,12 +38,12 @@ export function StatCard({
         </div>
         <div
           className={cn(
-            "text-xl font-semibold tabular-nums",
+            "text-2xl font-semibold",
             accent === "income" && "text-success",
             accent === "expense" && "text-destructive"
           )}
         >
-          {value}
+          <Money value={value} />
         </div>
         {note && (
           <div

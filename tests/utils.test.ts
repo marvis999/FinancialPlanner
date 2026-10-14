@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDate, formatMonthLabel, localIso, todayIso } from "@/lib/utils";
+import { euroParts, formatDate, formatEuro, formatMonthLabel, localIso, todayIso } from "@/lib/utils";
 
 describe("localIso (B16)", () => {
   it("returns the LOCAL calendar day, not the UTC one", () => {
@@ -41,5 +41,26 @@ describe("formatters do not throw (C9)", () => {
   it("still formats real dates", () => {
     expect(formatDate("2026-08-18")).toBe("18.08.2026");
     expect(formatMonthLabel("2026-08")).toMatch(/2?6/);
+  });
+});
+
+describe("euroParts", () => {
+  it("puts the sign first in English and last in German, without the gap", () => {
+    expect(euroParts(-5934.21, "en")).toEqual([
+      { text: "-", currency: false },
+      { text: "€", currency: true },
+      { text: "5,934.21", currency: false },
+    ]);
+    expect(euroParts(-5934.21, "de")).toEqual([
+      { text: "-5.934,21", currency: false },
+      { text: "€", currency: true },
+    ]);
+  });
+
+  it("holds the same digits as formatEuro", () => {
+    for (const locale of ["de", "en"] as const) {
+      const joined = euroParts(1234.5, locale).map((part) => part.text).join("");
+      expect(joined).toBe(formatEuro(1234.5, locale).replace(/\s/g, ""));
+    }
   });
 });

@@ -49,31 +49,34 @@
     --cat-einkommen: #0d7d6f;
   }
 
+  /* Dark mode is "ink": a navy-slate ground, raised cards and one amber accent
+     for primary actions. Mid-dark rather than near-black on purpose. */
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 65%;
-    --destructive-foreground: 222 47% 11%;
-    --success: 142 69% 58%;
-    --success-foreground: 144 61% 10%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 223 28% 15%;
+    --foreground: 222 38% 95%;
+    --card: 223 24% 19%;
+    --card-foreground: 222 38% 95%;
+    --popover: 223 24% 19%;
+    --popover-foreground: 222 38% 95%;
+    --primary: 36 87% 67%;
+    --primary-foreground: 38 40% 12%;
+    --secondary: 222 23% 25%;
+    --secondary-foreground: 222 38% 95%;
+    --muted: 222 23% 25%;
+    --muted-foreground: 223 21% 72%;
+    --accent: 222 23% 25%;
+    --accent-foreground: 222 38% 95%;
+    --destructive: 0 80% 71%;
+    --destructive-foreground: 223 28% 15%;
+    --success: 160 50% 66%;
+    --success-foreground: 223 28% 15%;
+    --border: 222 23% 23%;
+    --input: 221 21% 29%;
+    --ring: 36 87% 67%;
 
-    --chart-1: 217 91% 60%;
-    --chart-2: 142 69% 58%;
+    /* History in blue, forecast in amber, as in the design. */
+    --chart-1: 226 100% 81%;
+    --chart-2: 36 87% 67%;
     --chart-3: 0 84% 60%;
     --chart-4: 47 96% 53%;
     --chart-5: 280 65% 70%;
@@ -99,5 +102,7 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Equal-width digits everywhere, so amounts line up in lists and tables. */
+    font-variant-numeric: tabular-nums;
   }
 }
