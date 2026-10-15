@@ -493,6 +493,8 @@ export function Dashboard({
                   anchorTs={hasHistory ? tsOf(anchorDate) : undefined}
                   anchorLabel={msg("lastImportLabel", { date: formatDate(anchorDate) })}
                   todayTs={hasHistory ? tsOf(today) : undefined}
+                  negativeAt={brokePoint}
+                  onExplainNegative={() => setShowBrokeTrace(true)}
                 />
                 <p className="mt-3 text-xs text-muted-foreground">
                   {msg("chartHint")}
@@ -532,25 +534,6 @@ export function Dashboard({
                       ? msg("missingExpenses")
                       : msg("missingIncome")}
                   </p>
-                )}
-                {brokePoint && (
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    <p>
-                      {msg("goesNegative")}
-                      <strong>{formatDate(brokePoint.date)}</strong>
-                      {msg("goesNegativeTail", {
-                        amount: formatEuro(brokePoint.balance),
-                      })}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setShowBrokeTrace(true)}
-                    >
-                      {msg("showCalculation")}
-                    </Button>
-                  </div>
                 )}
                 {/* Mounted only while open (see the dialog note below). */}
                 {showBrokeTrace && brokePoint && (
