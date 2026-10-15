@@ -126,9 +126,10 @@ This installs the dependencies, builds the app, installs and starts the
 desktop offers web app launchers, adds a "Financial Planner" entry to the app
 menu. Run it again after every update; it rebuilds and restarts. It uses the same `./data` folder as the dev server.
 
-Stop the dev server and the Docker container first: all three use port 3210,
-and the build overwrites the `.next` folder the dev server reads. The Claude
-features use the `claude` CLI from your mise shims and its existing login.
+Stop the dev server and the Docker container first: all three use port 3210.
+The dev server builds into `.next-dev`, so it never touches the installed
+build in `.next`. The Claude features use the `claude` CLI from your mise
+shims and its existing login.
 
 ```bash
 systemctl --user status financial-planner     # is it running?
