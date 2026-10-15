@@ -140,6 +140,8 @@
     "amountAria": "Budget amount"
   },
   "chart": {
+    "negativeLabel": "Balance goes negative on {date}: {amount}",
+    "showCalculation": "Show the calculation",
     "actualFull": "Actual (statement)",
     "forecastFull": "Forecast",
     "trendFull": "Actual average",
@@ -309,9 +311,6 @@
     "perMonthAmount": "{amount} per month",
     "missingExpenses": "Are recurring expenses missing?",
     "missingIncome": "Is recurring income missing?",
-    "goesNegative": "⚠️ The balance goes negative on ",
-    "goesNegativeTail": ": {amount}.",
-    "showCalculation": "Show the calculation",
     "budgetsTitle": "Budgets",
     "budgetsDescription": "Monthly limits per category for {period}. Bookings count towards their category; the forecast books the budget amount each period. The white line shows where your current daily pace lands at the end of the period. At the right edge, the budget is blown. Hover a bar for details.",
     "spendingTitle": "Spending by category",

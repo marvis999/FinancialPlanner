@@ -140,6 +140,8 @@
     "amountAria": "Budgetbetrag"
   },
   "chart": {
+    "negativeLabel": "Der Kontostand wird am {date} negativ: {amount}",
+    "showCalculation": "Rechnung anzeigen",
     "actualFull": "Ist (Kontoauszug)",
     "forecastFull": "Prognose",
     "trendFull": "Ist-Durchschnitt",
@@ -309,9 +311,6 @@
     "perMonthAmount": "{amount} pro Monat",
     "missingExpenses": "Fehlen laufende Ausgaben?",
     "missingIncome": "Fehlen laufende Einnahmen?",
-    "goesNegative": "⚠️ Der Kontostand wird am ",
-    "goesNegativeTail": " negativ: {amount}.",
-    "showCalculation": "Rechnung anzeigen",
     "budgetsTitle": "Budgets",
     "budgetsDescription": "Monatliche Limits pro Kategorie für {period}. Umsätze zählen über ihre Kategorie hinein, die Prognose bucht jede Periode den Budgetbetrag ein. Die weiße Linie zeigt, wo du mit dem aktuellen Tagesschnitt am Periodenende landest. Sitzt sie am rechten Rand, wird das Budget gerissen. Details per Hover über den Balken.",
     "spendingTitle": "Ausgaben nach Kategorie",
