@@ -183,8 +183,10 @@ export function parseAmountInput(
     }
   } else if (hasComma) {
     // A lone comma is a decimal point in German and a thousands separator in
-    // English: "1,234" is 1,234 there and 1234 here.
-    s = locale === "de" ? s.replace(",", ".") : s.replace(/,/g, "");
+    // English: "1,234" is 1,234 there and 1234 here. Only groups of exactly
+    // three digits can be thousands, so "12,50" is 12.5 in English too.
+    const englishThousands = /^-?\d{1,3}(,\d{3})+$/.test(s);
+    s = locale === "en" && englishThousands ? s.replace(/,/g, "") : s.replace(",", ".");
   } else if (hasDot && locale === "de" && /^\d{1,3}(\.\d{3})+$/.test(s)) {
     // German thousands separators without decimals: "3.850" means 3850.
     s = s.replace(/\./g, "");
