@@ -49,7 +49,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
-    "next": "^15.5.24",
+    "next": "^15.5.28",
     "next-intl": "^4.14.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
