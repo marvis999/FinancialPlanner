@@ -1,0 +1,34 @@
+# Static file server for the exported demo. Rendered by the nginx image's
+# entrypoint (envsubst), which fills in ${FRAME_ANCESTORS} only.
+#
+# Every header sits in this server block: an add_header inside a location
+# would silently drop all of them for that location.
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    server_tokens off;
+
+    # The demo makes no request to any other host: no fonts, no analytics, no
+    # API. connect-src 'self' turns an accidental one into a console error.
+    # Next's static export inlines its bootstrap scripts, and the charts set
+    # style attributes, hence 'unsafe-inline' for both.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors ${FRAME_ANCESTORS}" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    # A demo, not content: keep the subdomain out of search engines.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+
+    location / {
+        try_files $uri $uri.html $uri/ =404;
+    }
+
+    # Content-hashed file names: safe to cache for good. `expires` sets
+    # Cache-Control without an add_header, so the headers above still apply.
+    location /_next/static/ {
+        expires max;
+    }
+
+    error_page 404 /404.html;
+}

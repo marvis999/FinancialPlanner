@@ -363,6 +363,7 @@
     "repays": "Tilgt: {name}"
   },
   "server": {
+    "demoUnavailable": "In der Demo nicht verfügbar.",
     "notUmsatzCsv": "Die Datei sieht nicht wie ein Sparkassen-Umsatz-CSV aus (Spalten „Buchungstag“/„Betrag“ fehlen).",
     "noReadableRows": "Keine lesbaren Umsätze: {invalid} Zeilen haben ein ungültiges Datum oder einen ungültigen Betrag.",
     "noBookedRows": "Keine gebuchten Umsätze in der Datei gefunden.",

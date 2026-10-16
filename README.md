@@ -150,6 +150,12 @@ npm run typecheck  # tsc --noEmit
 npm run build      # production build
 ```
 
+### Static demo
+
+`npm run build:demo` exports a server-free build with the demo household to
+`demo/out`, for embedding on a website. See [demo/README.md](demo/README.md)
+for how it works, the container and its headers.
+
 ### Demo data
 
 The data-source switch in the bottom left toggles between two separate SQLite

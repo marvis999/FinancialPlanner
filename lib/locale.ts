@@ -5,6 +5,8 @@
  * the client and needs the same list the server resolves messages from.
  */
 
+import type { Formats } from "next-intl";
+
 export const LOCALES = ["de", "en"] as const;
 
 export type Locale = (typeof LOCALES)[number];
@@ -38,3 +40,22 @@ export const INTL_LOCALES: Record<Locale, string> = {
 export function intlLocale(locale: Locale): string {
   return INTL_LOCALES[locale] ?? INTL_LOCALES[DEFAULT_LOCALE];
 }
+
+/**
+ * The named formats every message and formatter refers to. Here rather than in
+ * i18n/request.ts so the static demo, which has no request config, provides
+ * the same ones on the client.
+ *
+ * The ledger is a euro account whatever the interface language is; only the
+ * way the number is written follows the locale.
+ */
+export const INTL_FORMATS: Formats = {
+  number: {
+    euro: { style: "currency", currency: "EUR" },
+    amountInput: { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  },
+  dateTime: {
+    day: { day: "2-digit", month: "2-digit", year: "numeric" },
+    monthLabel: { month: "short", year: "2-digit" },
+  },
+};

@@ -4,11 +4,14 @@
 /.next-dev
 /out
 /build
+/demo/.next
+/demo/out
 next-env.d.ts
 *.code-workspace
 
 # local SQLite database
 /data
+/data_backup
 
 # misc
 *.log

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Geist } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
+
+import { bricolage, geist } from "@/lib/fonts";
+import { themeScript } from "@/lib/theme-script";
 
 import "./globals.css";
 
@@ -12,26 +14,6 @@ export async function generateMetadata(): Promise<Metadata> {
     description: t("description"),
   };
 }
-
-// Self-hosted by next/font at build time, so the running app makes no font requests.
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
-const bricolage = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: "800",
-  variable: "--font-bricolage",
-});
-
-// Applied before paint to avoid a flash of the wrong theme.
-const themeScript = `
-(function () {
-  try {
-    var stored = localStorage.getItem('financial-planner-theme');
-    var dark = stored ? stored === 'dark'
-      : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (dark) document.documentElement.classList.add('dark');
-  } catch (e) {}
-})();
-`;
 
 export default async function RootLayout({
   children,

@@ -1,5 +1,3 @@
-import crypto from "node:crypto";
-
 import type { Kind, Settings } from "./types";
 
 /**
@@ -248,8 +246,10 @@ function between(rng: () => number, min: number, max: number): number {
 }
 
 /**
- * Same shape as the CSV importer's fingerprint, prefixed with "demo" so a
- * generated row can never collide with a real imported booking.
+ * The fields the CSV importer hashes, joined in the clear and prefixed with
+ * "demo": unique per row, never equal to a real importer's sha256 hex, and
+ * free of node:crypto, so the static demo can generate the household in the
+ * browser.
  */
 function fingerprintOf(row: {
   date: string;
@@ -258,10 +258,7 @@ function fingerprintOf(row: {
   purpose: string;
   occurrence: number;
 }): string {
-  return crypto
-    .createHash("sha256")
-    .update(["demo", row.date, row.amount.toFixed(2), row.name, row.purpose, row.occurrence].join("|"))
-    .digest("hex");
+  return ["demo", row.date, row.amount.toFixed(2), row.name, row.purpose, row.occurrence].join("|");
 }
 
 /** Build the whole fictional dataset for a given "today" (YYYY-MM-DD). */

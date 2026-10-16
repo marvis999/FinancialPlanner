@@ -2,6 +2,9 @@ node_modules
 .next
 .next-dev
 data
+data_backup
+demo/.next
+demo/out
 .git
 .claude
 .dockerignore

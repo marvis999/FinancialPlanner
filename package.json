@@ -28,6 +28,8 @@
   "scripts": {
     "dev": "next dev -p 3210",
     "build": "next build",
+    "dev:demo": "next dev demo -p 3211",
+    "build:demo": "next build demo",
     "start": "next start -p 3210",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

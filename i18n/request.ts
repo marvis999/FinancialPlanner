@@ -1,7 +1,7 @@
 import { getRequestConfig } from "next-intl/server";
 
 import { activeLocale } from "@/lib/locale-store";
-import { DEFAULT_LOCALE } from "@/lib/locale";
+import { DEFAULT_LOCALE, INTL_FORMATS } from "@/lib/locale";
 
 /**
  * There is one route, so there is no locale in the URL: the language is a
@@ -22,17 +22,6 @@ export default getRequestConfig(async () => {
   return {
     locale,
     messages: (await import(`../messages/${locale}.json`)).default,
-    // The ledger is a euro account whatever the interface language is; only
-    // the way the number is written follows the locale.
-    formats: {
-      number: {
-        euro: { style: "currency", currency: "EUR" },
-        amountInput: { minimumFractionDigits: 2, maximumFractionDigits: 2 },
-      },
-      dateTime: {
-        day: { day: "2-digit", month: "2-digit", year: "numeric" },
-        monthLabel: { month: "short", year: "2-digit" },
-      },
-    },
+    formats: INTL_FORMATS,
   };
 });

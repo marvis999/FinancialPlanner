@@ -363,6 +363,7 @@
     "repays": "Repays: {name}"
   },
   "server": {
+    "demoUnavailable": "Not available in the demo.",
     "notUmsatzCsv": "This file does not look like a bank booking CSV (the “Buchungstag”/“Betrag” columns are missing).",
     "noReadableRows": "No readable bookings: {invalid} rows have an invalid date or amount.",
     "noBookedRows": "No booked transactions found in the file.",

@@ -25,6 +25,19 @@ import {
 import { isDataSource, type DataSource } from "@/lib/data-source";
 import { isLocale, type Locale } from "@/lib/locale";
 import { activeLocale, setActiveLocale } from "@/lib/locale-store";
+import {
+  toAmount,
+  toCategory,
+  toEndDate,
+  toIds,
+  toInterval,
+  toIsoDay,
+  toKind,
+  toRecurringCategory,
+  toRemaining,
+  toSignedAmount,
+  toTag,
+} from "@/lib/action-input";
 import { clampBudgetStartDay } from "@/lib/period";
 import { effectiveRemaining } from "@/lib/projection";
 import {
@@ -62,36 +75,6 @@ import type {
   TransactionItem,
 } from "@/lib/types";
 
-function toKind(value: unknown): Kind {
-  return value === "income" ? "income" : "expense";
-}
-
-function toAmount(value: unknown): number {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  // store a positive magnitude; sign is derived from `kind`
-  return Math.abs(Math.round(parsed * 100) / 100);
-}
-
-/** Like toAmount but keeps the sign: an account balance can be negative. */
-function toSignedAmount(value: unknown): number {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.round(parsed * 100) / 100;
-}
-
-function toInterval(value: unknown): number {
-  const parsed = Math.round(Number(value));
-  return [1, 3, 6, 12].includes(parsed) ? parsed : 1;
-}
-
-function toRemaining(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.abs(Math.round(parsed * 100) / 100);
-}
-
 /**
  * The day a Restschuld figure is read against: the newest imported booking,
  * which is exactly the day the dashboard forecasts from and the day the edit
@@ -102,19 +85,6 @@ function toRemaining(value: unknown): number | null {
 function remainingAnchorDate(): string {
   const newest = db.listTransactions()[0];
   return newest ? newest.date : db.getSettings().startDate;
-}
-
-/** Budget category of a recurring item; null = covered by no budget. */
-function toRecurringCategory(value: unknown): string | null {
-  return typeof value === "string" && ALL_CATEGORIES.some((category) => category.key === value)
-    ? value
-    : null;
-}
-
-function toEndDate(value: unknown): string | null {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? value
-    : null;
 }
 
 export async function addRecurringAction(input: {
@@ -183,13 +153,6 @@ export async function updateRecurringAction(input: {
 // ---------------------------------------------------------------------------
 // Budgets
 // ---------------------------------------------------------------------------
-
-function toCategory(value: unknown): string | null {
-  return typeof value === "string" &&
-    ALL_CATEGORIES.some((category) => category.key === value)
-    ? value
-    : null;
-}
 
 export async function addBudgetAction(input: {
   category: string;
@@ -263,17 +226,6 @@ export async function applyCategorySuggestionAction(
 // ---------------------------------------------------------------------------
 // Transaction tags
 // ---------------------------------------------------------------------------
-
-function toIds(ids: number[]): number[] {
-  return ids.filter((parsed) => Number.isInteger(parsed)).slice(0, 5000);
-}
-
-/** Trimmed, single-spaced, capped at 30 chars; null when nothing remains. */
-function toTag(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const tag = value.trim().replace(/\s+/g, " ").slice(0, 30);
-  return tag || null;
-}
 
 export async function addTransactionTagAction(
   ids: number[],
@@ -828,10 +780,6 @@ export async function confirmCsvImportAction(
 // ---------------------------------------------------------------------------
 // Links between bookings and recurring due dates (manual corrections)
 // ---------------------------------------------------------------------------
-
-function toIsoDay(value: unknown): string | null {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
-}
 
 /** Link one booking to the due date it settles (and teach the pattern). */
 export async function linkTransactionAction(
