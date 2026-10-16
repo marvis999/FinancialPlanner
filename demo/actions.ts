@@ -16,10 +16,14 @@ import { effectiveCategory } from "@/lib/categories";
 import type { DataSource } from "@/lib/data-source";
 import { isLocale, type Locale } from "@/lib/locale";
 import { clampBudgetStartDay } from "@/lib/period";
+import { parseHiddenNames } from "@/lib/pii-mask";
 import type {
   AnalysisJobInfo,
   AnalysisState,
   AppState,
+  ClaudePreview,
+  ClaudePreviewKind,
+  ClaudePrivacy,
   ImportCheckState,
   ImportReviewDecision,
   ImportSkippedDue,
@@ -442,6 +446,25 @@ export async function finishClaudeLoginAction(_code: string): Promise<ClaudeAuth
 }
 
 export async function cancelClaudeLoginAction(): Promise<void> {}
+
+let demoHiddenNames: string[] = [];
+
+export async function setClaudeEnabledAction(_enabled: boolean): Promise<ClaudePrivacy> {
+  // Claude never runs in the demo, so the switch stays off.
+  return { enabled: false, hiddenNames: demoHiddenNames };
+}
+
+export async function previewClaudePromptAction(
+  _kind: ClaudePreviewKind,
+  _question = ""
+): Promise<ClaudePreview> {
+  return { ok: false, prompt: "", hidden: [], sample: 0, error: unavailable() };
+}
+
+export async function setHiddenNamesAction(names: string): Promise<ClaudePrivacy> {
+  demoHiddenNames = parseHiddenNames(names);
+  return { enabled: false, hiddenNames: demoHiddenNames };
+}
 
 export async function getAnalysisStateAction(): Promise<AnalysisState> {
   return analysisState();

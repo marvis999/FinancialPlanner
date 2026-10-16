@@ -1,5 +1,6 @@
 import { Dashboard } from "@/components/dashboard";
 import { SourceSwitcher } from "@/components/source-switcher";
+import { claudePrivacy } from "@/lib/claude-privacy";
 import { activeSource, getAppState, listTransactions } from "@/lib/db";
 import { todayIso } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ export default function Home() {
         initialState={state}
         transactions={transactions}
         today={todayIso()}
+        claudePrivacy={claudePrivacy()}
       />
       <SourceSwitcher source={source} />
     </>

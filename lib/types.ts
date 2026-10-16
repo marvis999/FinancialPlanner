@@ -1,3 +1,5 @@
+import type { PlaceholderKind } from "./pii-mask";
+
 export type Kind = "expense" | "income";
 
 /** How often a recurring item is due, in months. */
@@ -244,6 +246,8 @@ export interface ImportCheckResult {
   /** How many of those were sent to Claude (newest first, capped). */
   checked: number;
   findings: ImportCheckFinding[];
+  /** Claude is switched off in Settings: nothing was sent, no findings. */
+  claudeOff?: boolean;
 }
 
 /** Snapshot of the pre-import check job, polled by the upload component. */
@@ -276,6 +280,27 @@ export interface MonthlyBalance {
 }
 
 /** A parsed transaction ready to be inserted (fingerprint for de-duplication). */
+/** What the preview in Settings shows: one of the three prompts Claude gets. */
+export type ClaudePreviewKind = "import" | "categories" | "question";
+
+export interface ClaudePreview {
+  ok: boolean;
+  /** The prompt exactly as it would be sent, placeholders included. */
+  prompt: string;
+  /** Distinct values hidden per kind, e.g. { kind: "IBAN", count: 2 }. */
+  hidden: { kind: PlaceholderKind; count: number }[];
+  /** Bookings the import example is built from; 0 for the other kinds. */
+  sample: number;
+  error: string | null;
+}
+
+/** Whether the app may send data to Claude, and the names it hides first. */
+export interface ClaudePrivacy {
+  enabled: boolean;
+  /** Names masked before anything is sent, one per entry. */
+  hiddenNames: string[];
+}
+
 export interface ImportTransaction {
   date: string;
   valuta: string | null;

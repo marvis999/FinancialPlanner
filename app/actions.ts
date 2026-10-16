@@ -54,6 +54,14 @@ import {
 } from "@/lib/claude-auth";
 import { todayIso } from "@/lib/utils";
 import { looksLikeUmsatzCsv, parseCsvTransactions } from "@/lib/csv-import";
+import { parseHiddenNames } from "@/lib/pii-mask";
+import {
+  claudeEnabled,
+  claudePrivacy,
+  newMasker,
+  setClaudeEnabled,
+  setHiddenNames,
+} from "@/lib/claude-privacy";
 import type {
   AnalysisJobInfo,
   AnalysisState,
@@ -61,6 +69,9 @@ import type {
   CategoryAnalysisState,
   CategorySuggestion,
   ClaudeAuthStatus,
+  ClaudePreview,
+  ClaudePreviewKind,
+  ClaudePrivacy,
   FreeAnalysisState,
   ImportCheckResult,
   ImportCheckState,
@@ -574,6 +585,17 @@ export async function startCsvCheckAction(
   const payments = toCheckPayments(fresh);
   const oneoffs = db.listOneOff();
   const taken = new Set(summary.recurringMatches.map((match) => match.fingerprint));
+  if (!claudeEnabled()) {
+    // The review still opens: the recurring matches above need no Claude.
+    startJob<ImportCheckResult>(IMPORT_CHECK_JOB, {}, async () => ({
+      newCount: fresh.length,
+      checked: 0,
+      findings: [],
+      claudeOff: true,
+    }));
+    return { ok: true, started: true, summary };
+  }
+  const masker = newMasker();
   startJob<ImportCheckResult>(IMPORT_CHECK_JOB, {}, async (progress) => {
     progress(
       msg("newBookings", { count: fresh.length }) +
@@ -591,7 +613,8 @@ export async function startCsvCheckAction(
       payments,
       oneoffs,
       msg("answerLanguage"),
-      summary.expected
+      summary.expected,
+      masker.mask
     );
     progress(msg("startingClaude", { model: CLAUDE_MODEL }));
     const run = await runClaude(prompt, {
@@ -608,7 +631,12 @@ export async function startCsvCheckAction(
       oneoffs,
       summary.expected,
       taken
-    );
+    ).map((finding) => ({
+      ...finding,
+      categoryReason: masker.unmask(finding.categoryReason),
+      oneOffReason: masker.unmask(finding.oneOffReason),
+      recurringReason: masker.unmask(finding.recurringReason),
+    }));
     progress(
       findings.length
         ? msg("findingsFound", { count: findings.length })
@@ -834,6 +862,93 @@ export interface ClaudeAuthResponse {
   error: string | null;
 }
 
+/* ---------------------------------------------------------------------------
+ * Claude privacy: the on/off switch and the names hidden from it
+ * ------------------------------------------------------------------------- */
+
+/** Recent bookings the import preview treats as a fresh upload. */
+const PREVIEW_IMPORT_BOOKINGS = 20;
+
+/** A stored booking in the shape the import check reads. */
+function asImportRecord(transaction: TransactionItem): ImportTransaction {
+  return {
+    date: transaction.date,
+    valuta: null,
+    name: transaction.name,
+    amount: transaction.amount,
+    currency: "EUR",
+    type: transaction.type,
+    purpose: transaction.purpose,
+    iban: transaction.counterpartyIban,
+    bic: "",
+    fingerprint: String(transaction.id),
+  };
+}
+
+/**
+ * Build a prompt exactly as a real run would, masking included, without
+ * sending it anywhere. Works while Claude is off, so the user can see what
+ * turning it on would share. The import example uses the newest bookings as
+ * if they had just been uploaded.
+ */
+export async function previewClaudePromptAction(
+  kind: ClaudePreviewKind,
+  question = ""
+): Promise<ClaudePreview> {
+  const msg = await getTranslations("server");
+  const failed = (error: string): ClaudePreview => ({
+    ok: false,
+    prompt: "",
+    hidden: [],
+    sample: 0,
+    error,
+  });
+  if (kind !== "import" && kind !== "categories" && kind !== "question") {
+    return failed(msg("previewUnknownKind"));
+  }
+  const transactions = db.listTransactions();
+  if (kind !== "question" && !transactions.length) return failed(msg("previewNoBookings"));
+
+  const masker = newMasker();
+  const answerLanguage = msg("answerLanguage");
+  let prompt: string;
+  let sample = 0;
+  if (kind === "categories") {
+    prompt = categoryAnalysisPrompt(buildMerchantGroups(transactions), answerLanguage, masker.mask);
+  } else if (kind === "question") {
+    const asked = (typeof question === "string" ? question : "").trim().slice(0, 2000);
+    prompt = freeAnalysisPrompt(
+      transactions,
+      db.getAppState(),
+      asked || msg("previewSampleQuestion"),
+      answerLanguage,
+      masker.mask
+    );
+  } else {
+    const recent = transactions.slice(0, PREVIEW_IMPORT_BOOKINGS).map(asImportRecord);
+    sample = recent.length;
+    prompt = buildImportCheckPrompt(
+      toCheckPayments(recent),
+      db.listOneOff(),
+      answerLanguage,
+      [],
+      masker.mask
+    );
+  }
+  return { ok: true, prompt, hidden: masker.hidden(), sample, error: null };
+}
+
+export async function setClaudeEnabledAction(enabled: boolean): Promise<ClaudePrivacy> {
+  setClaudeEnabled(enabled === true);
+  return claudePrivacy();
+}
+
+/** One name per line, as typed into Settings. */
+export async function setHiddenNamesAction(names: string): Promise<ClaudePrivacy> {
+  setHiddenNames(parseHiddenNames(typeof names === "string" ? names.slice(0, 20_000) : ""));
+  return claudePrivacy();
+}
+
 export async function getClaudeAuthAction(): Promise<ClaudeAuthResponse> {
   const msg = await getTranslations("server");
   const status = await claudeAuthStatus();
@@ -932,6 +1047,100 @@ function buildMerchantGroups(transactions: TransactionItem[]): MerchantGroup[] {
   return list;
 }
 
+/** The category review prompt; the preview in Settings builds the same text. */
+function categoryAnalysisPrompt(
+  groups: MerchantGroup[],
+  answerLanguage: string,
+  mask: (text: string) => string
+): string {
+  const catalog = ALL_CATEGORIES.map(
+    (category) => `${category.key}: ${category.label}`
+  ).join("\n");
+  const groupLines = groups
+    .map((group) =>
+      JSON.stringify({
+        id: group.key,
+        name: mask(group.name),
+        currentCategory: group.category,
+        bookings: group.count,
+        total: Math.round(group.total * 100) / 100,
+        samples: group.samples.map(mask),
+      })
+    )
+    .join("\n");
+
+  return `You are an assistant in a personal finance app, reviewing the automatic categorisation of bank bookings on a German private account. The merchant names and booking text are German.
+
+Available categories (key: label):
+${catalog}
+
+Below are merchant groups (one JSON object per line) with their currently assigned category. Many sit on "sonstiges" because no keyword matched; some are misfiled through keyword collisions (e.g. pharmacies in "bargeld", money transfers in "kredite").
+
+Suggest a category ONLY where it differs from the current one and you are confident. Leave out groups whose category is right or unclear. Restaurants/fast food, parking, leisure, public offices and the like with no fitting category stay "sonstiges", unless another one clearly applies.
+
+Answer with a JSON array ONLY, with no explanatory text before or after:
+[{"id": "g12", "category": "<category-key>", "reason": "<short reason in ${answerLanguage}, max. 12 words>"}]
+
+Do not use any tools; answer directly.
+
+Merchant groups:
+${groupLines}`;
+}
+
+/** The free-question prompt; the preview in Settings builds the same text. */
+function freeAnalysisPrompt(
+  transactions: TransactionItem[],
+  state: AppState,
+  asked: string,
+  answerLanguage: string,
+  mask: (text: string) => string
+): string {
+  // Compact context: per-month category sums for the last 6 months.
+  const INCOME_KEY = "income";
+  const months = new Map<string, Map<string, number>>();
+  for (const transaction of transactions) {
+    const month = transaction.date.slice(0, 7);
+    let categorySums = months.get(month);
+    if (!categorySums) months.set(month, (categorySums = new Map()));
+    const key =
+      transaction.amount >= 0 ? INCOME_KEY : effectiveCategory(transaction);
+    categorySums.set(key, (categorySums.get(key) ?? 0) + transaction.amount);
+  }
+  const recentMonths = [...months.keys()].sort().slice(-6);
+  const monthly = recentMonths.map((month) => ({
+    month,
+    // Category labels come from the catalogue, so they follow the interface
+    // language the answer is written in.
+    ...Object.fromEntries(
+      [...months.get(month)!.entries()].map(([categoryKey, total]) => [
+        categoryKey === INCOME_KEY ? INCOME_KEY : categoryByKey(categoryKey).label,
+        Math.round(total * 100) / 100,
+      ])
+    ),
+  }));
+
+  const recurringSummary = state.recurring.map((recurring) => ({
+    name: mask(recurring.name),
+    amount: recurring.kind === "income" ? recurring.amount : -recurring.amount,
+    intervalMonths: recurring.intervalMonths,
+    isActive: recurring.isActive,
+    remainingAmount: recurring.remainingAmount,
+    endDate: recurring.endDate,
+  }));
+
+  return `You are a finance assistant in a personal finance app (a German private account). Answer the user's question briefly and concretely in ${answerLanguage}, using numbers from the data. Do not use any tools; answer directly as plain text (no JSON, no Markdown tables).
+
+Account data (current balance ${state.settings.startingBalance} EUR):
+
+Monthly totals by category (last 6 months, negative values are expenses):
+${JSON.stringify(monthly)}
+
+Recurring items:
+${JSON.stringify(recurringSummary)}
+
+The user's question: ${mask(asked)}`;
+}
+
 const CATEGORY_JOB = "categories";
 const FREE_JOB = "free";
 
@@ -953,6 +1162,8 @@ function claudePhaseLine(
  */
 function claudeErrorMessage(msg: ServerT, error: ClaudeError): string {
   switch (error.code) {
+    case "disabled":
+      return msg("claudeDisabled");
     case "timeout":
       return msg("claudeTimeout", { seconds: error.seconds });
     case "cliNotFound":
@@ -982,7 +1193,8 @@ export async function startCategoryAnalysisAction(): Promise<AnalysisState> {
   // returned, when there is no request left to resolve a locale from.
   const msg = await getTranslations("server");
   const transactions = db.listTransactions();
-  if (transactions.length) {
+  if (transactions.length && claudeEnabled()) {
+    const masker = newMasker();
     startJob<CategorySuggestion[]>(CATEGORY_JOB, {}, async (progress) => {
       const groups = buildMerchantGroups(transactions);
       progress(
@@ -992,39 +1204,7 @@ export async function startCategoryAnalysisAction(): Promise<AnalysisState> {
         })
       );
 
-      const catalog = ALL_CATEGORIES.map(
-        (category) => `${category.key}: ${category.label}`
-      ).join("\n");
-      const groupLines = groups
-        .map((group) =>
-          JSON.stringify({
-            id: group.key,
-            name: group.name,
-            currentCategory: group.category,
-            bookings: group.count,
-            total: Math.round(group.total * 100) / 100,
-            samples: group.samples,
-          })
-        )
-        .join("\n");
-
-      const answerLanguage = msg("answerLanguage");
-      const prompt = `You are an assistant in a personal finance app, reviewing the automatic categorisation of bank bookings on a German private account. The merchant names and booking text are German.
-
-Available categories (key: label):
-${catalog}
-
-Below are merchant groups (one JSON object per line) with their currently assigned category. Many sit on "sonstiges" because no keyword matched; some are misfiled through keyword collisions (e.g. pharmacies in "bargeld", money transfers in "kredite").
-
-Suggest a category ONLY where it differs from the current one and you are confident. Leave out groups whose category is right or unclear. Restaurants/fast food, parking, leisure, public offices and the like with no fitting category stay "sonstiges", unless another one clearly applies.
-
-Answer with a JSON array ONLY, with no explanatory text before or after:
-[{"id": "g12", "category": "<category-key>", "reason": "<short reason in ${answerLanguage}, max. 12 words>"}]
-
-Do not use any tools; answer directly.
-
-Merchant groups:
-${groupLines}`;
+      const prompt = categoryAnalysisPrompt(groups, msg("answerLanguage"), masker.mask);
 
       progress(msg("startingClaude", { model: CLAUDE_MODEL }));
       const run = await runClaude(prompt, {
@@ -1061,7 +1241,7 @@ ${groupLines}`;
           currentCategory: group.category,
           suggestedCategory: category,
           reason:
-            typeof item.reason === "string" ? item.reason.slice(0, 200) : "",
+            typeof item.reason === "string" ? masker.unmask(item.reason.slice(0, 200)) : "",
           accepted: false,
         });
       }
@@ -1095,56 +1275,16 @@ export async function startFreeAnalysisAction(
   // returned, when there is no request left to resolve a locale from.
   const msg = await getTranslations("server");
   const asked = (question || "").trim().slice(0, 2000);
-  if (!asked) return getAnalysisStateAction();
+  if (!asked || !claudeEnabled()) return getAnalysisStateAction();
+  const masker = newMasker();
 
-  const transactions = db.listTransactions();
-  const state = db.getAppState();
-
-  // Compact context: per-month category sums for the last 6 months.
-  const INCOME_KEY = "income";
-  const months = new Map<string, Map<string, number>>();
-  for (const transaction of transactions) {
-    const month = transaction.date.slice(0, 7);
-    let categorySums = months.get(month);
-    if (!categorySums) months.set(month, (categorySums = new Map()));
-    const key =
-      transaction.amount >= 0 ? INCOME_KEY : effectiveCategory(transaction);
-    categorySums.set(key, (categorySums.get(key) ?? 0) + transaction.amount);
-  }
-  const recentMonths = [...months.keys()].sort().slice(-6);
-  const monthly = recentMonths.map((month) => ({
-    month,
-    // Category labels come from the catalogue, so they follow the interface
-    // language the answer is written in.
-    ...Object.fromEntries(
-      [...months.get(month)!.entries()].map(([categoryKey, total]) => [
-        categoryKey === INCOME_KEY ? INCOME_KEY : categoryByKey(categoryKey).label,
-        Math.round(total * 100) / 100,
-      ])
-    ),
-  }));
-
-  const recurringSummary = state.recurring.map((recurring) => ({
-    name: recurring.name,
-    amount: recurring.kind === "income" ? recurring.amount : -recurring.amount,
-    intervalMonths: recurring.intervalMonths,
-    isActive: recurring.isActive,
-    remainingAmount: recurring.remainingAmount,
-    endDate: recurring.endDate,
-  }));
-
-  const answerLanguage = msg("answerLanguage");
-  const prompt = `You are a finance assistant in a personal finance app (a German private account). Answer the user's question briefly and concretely in ${answerLanguage}, using numbers from the data. Do not use any tools; answer directly as plain text (no JSON, no Markdown tables).
-
-Account data (current balance ${state.settings.startingBalance} EUR):
-
-Monthly totals by category (last 6 months, negative values are expenses):
-${JSON.stringify(monthly)}
-
-Recurring items:
-${JSON.stringify(recurringSummary)}
-
-The user's question: ${asked}`;
+  const prompt = freeAnalysisPrompt(
+    db.listTransactions(),
+    db.getAppState(),
+    asked,
+    msg("answerLanguage"),
+    masker.mask
+  );
 
   startJob<string>(FREE_JOB, { question: asked }, async (progress) => {
     progress(msg("contextAssembled"));
@@ -1153,7 +1293,7 @@ The user's question: ${asked}`;
       onProgress: (phase) => progress(claudePhaseLine(msg, phase), { replaceLast: true }),
     });
     if (!run.ok) throw new Error(claudeErrorMessage(msg, run.error));
-    return run.text;
+    return masker.unmask(run.text);
   });
   return getAnalysisStateAction();
 }

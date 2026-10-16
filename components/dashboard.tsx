@@ -7,6 +7,7 @@ import {
   ArrowUpRight,
   Link2,
   ListFilter,
+  ShieldOff,
   Trash2,
   TrendingUp,
   Wallet,
@@ -35,6 +36,7 @@ import {
   type CsvImportResponse,
 } from "@/app/actions";
 import { AnalysisTab } from "@/components/analysis-tab";
+import { ClaudePrivacyCard } from "@/components/claude-privacy-card";
 import { AppHeader, PlanNav, useView } from "@/components/app-header";
 import { useCategorySuggestions } from "@/components/category-suggestions";
 import { BalanceChart } from "@/components/balance-chart";
@@ -99,7 +101,7 @@ import {
   RecurringStatusLine,
   RecurringStatusMarker,
 } from "@/components/recurring-status";
-import type { AppState, RecurringItem, TransactionItem } from "@/lib/types";
+import type { AppState, ClaudePrivacy, RecurringItem, TransactionItem } from "@/lib/types";
 import { useFormatters } from "@/lib/use-formatters";
 import { cn } from "@/lib/utils";
 
@@ -113,15 +115,18 @@ export function Dashboard({
   initialState,
   transactions: initialTransactions,
   today,
+  claudePrivacy: initialClaudePrivacy,
 }: {
   initialState: AppState;
   transactions: TransactionItem[];
   /** Computed on the server so SSR and the first client render agree. */
   today: string;
+  claudePrivacy: ClaudePrivacy;
 }) {
   const msg = useTranslations("dashboard");
   const msgCommon = useTranslations("common");
   const msgStatus = useTranslations("recurringStatus");
+  const msgPrivacy = useTranslations("claudePrivacy");
   const {
     formatEuro,
     formatDate,
@@ -130,6 +135,7 @@ export function Dashboard({
     locale,
   } = useFormatters();
   const [view, setView] = useView();
+  const [claudePrivacy, setClaudePrivacy] = React.useState(initialClaudePrivacy);
   const [state, setState] = React.useState<AppState>(initialState);
   const [transactions, setTransactions] = React.useState(initialTransactions);
   const [isPending, startTransition] = React.useTransition();
@@ -887,7 +893,22 @@ export function Dashboard({
         {/* --------------------------- Claude analysis ---------------------- */}
         {view === "ask" && (
         <div className="space-y-6">
-          <AnalysisTab disabled={isPending} />
+          {claudePrivacy.enabled ? (
+            <AnalysisTab disabled={isPending} />
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-start gap-3 pt-6 sm:flex-row sm:items-center">
+                <ShieldOff className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
+                <div className="flex-1 space-y-1">
+                  <h2 className="font-semibold">{msgPrivacy("askOffTitle")}</h2>
+                  <p className="text-sm text-muted-foreground">{msgPrivacy("askOffBody")}</p>
+                </div>
+                <Button variant="secondary" onClick={() => setView("settings")}>
+                  {msgPrivacy("openSettings")}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
         )}
 
@@ -904,6 +925,7 @@ export function Dashboard({
             disabled={isPending}
             hasHistory={hasHistory}
           />
+          <ClaudePrivacyCard privacy={claudePrivacy} onChange={setClaudePrivacy} />
         </div>
         )}
 
