@@ -2,6 +2,8 @@ import "server-only";
 
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 
+import { claudeEnabled } from "./claude-privacy";
+
 /**
  * Headless bridge to the locally installed Claude Code CLI (`claude -p`).
  * Uses the user's existing Claude login — no API key handling in the app.
@@ -20,6 +22,8 @@ export const CLAUDE_MODEL = "claude-sonnet-5";
  * that holds `getTranslations`.
  */
 export type ClaudeError =
+  /** The user has not turned Claude on in Settings; nothing was sent. */
+  | { code: "disabled" }
   | { code: "timeout"; seconds: number }
   | { code: "cliNotFound" }
   | { code: "cliStartFailed"; detail: string }
@@ -128,6 +132,11 @@ export function runClaude(
   prompt: string,
   opts: { timeoutMs?: number; onProgress?: (p: ClaudeProgress) => void } = {}
 ): Promise<ClaudeRunResult> {
+  // The last line of defence: every prompt passes here, so no caller can send
+  // data while the switch in Settings is off.
+  if (!claudeEnabled()) {
+    return Promise.resolve({ ok: false, error: { code: "disabled" } });
+  }
   const timeoutMs = opts.timeoutMs ?? 300_000;
   return new Promise((resolve) => {
     let settled = false;

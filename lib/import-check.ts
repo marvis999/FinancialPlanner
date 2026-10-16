@@ -53,7 +53,9 @@ export function buildImportCheckPrompt(
   oneoffs: OneOffItem[],
   answerLanguage: string,
   /** Due dates the deterministic matcher could not settle from this file. */
-  expected: ImportExpectedDue[] = []
+  expected: ImportExpectedDue[] = [],
+  /** Hides personal details in every free-text field (see lib/pii-mask.ts). */
+  mask: (text: string) => string = (text) => text
 ): string {
   const catalog = ALL_CATEGORIES.map(
     (category) => `${category.key}: ${category.label}`
@@ -63,9 +65,10 @@ export function buildImportCheckPrompt(
       JSON.stringify({
         id: payment.tid,
         date: payment.record.date,
-        name: payment.record.name,
+        name: mask(payment.record.name),
         amount: round2(payment.record.amount),
-        purpose: payment.record.purpose.slice(0, 140),
+        // Masked before cutting, so a cut cannot leave half an IBAN behind.
+        purpose: mask(payment.record.purpose).slice(0, 140),
         currentCategory: categorize(payment.record),
       })
     )
@@ -74,7 +77,7 @@ export function buildImportCheckPrompt(
     .map((oneOff) =>
       JSON.stringify({
         id: oneOff.id,
-        name: oneOff.name,
+        name: mask(oneOff.name),
         amount: round2(signedOneOff(oneOff)),
         date: oneOff.date,
       })
@@ -84,7 +87,7 @@ export function buildImportCheckPrompt(
     .map((due) =>
       JSON.stringify({
         id: due.recurringId,
-        name: due.name,
+        name: mask(due.name),
         amount: round2(signedDue(due)),
         due: due.due,
       })

@@ -20,11 +20,15 @@ history from the forecast](docs/screenshot.png)
 - **better-sqlite3** for storage
 - **Vitest** for tests
 - **Docker** for deployment
-- **Claude Code CLI**, for the import review and analysis tab
+- **Claude Code CLI**, for the import review and the Ask Claude view
 
 > [!CAUTION]
 > Using the Claude CLI feature with real data means you are exposing that data
-> to a third party. Do not connect your subscription if you do not want this.
+> to a third party. It is off until you turn it on in Settings. While it is on,
+> booking texts and amounts are sent to Anthropic; IBANs, card numbers,
+> references, email addresses, phone numbers, street addresses and the names
+> you list are masked first. The masking matches common patterns and cannot
+> catch every personal detail.
 
 ## Features
 
@@ -32,7 +36,8 @@ history from the forecast](docs/screenshot.png)
 - Multiple languages supported
 - Balance forecast as a chart, with a warning and a day-by-day audit trail
   when the balance is heading below zero
-- Optional Claude CLI support to review imported data and categorization
+- Optional Claude CLI support to review imported data and categorization,
+  off by default, with personal details masked before anything is sent
 - Recurring items at monthly, quarterly, half-yearly or yearly intervals
 - One-off items on a given date, for income as well as spending
 - Loans with a remaining balance, a projected payoff date, and extra payments
@@ -86,7 +91,7 @@ docker compose down
 
 ### Optional: the Claude features in Docker
 
-The import review and the analysis tab shell out to the Claude Code CLI, which
+The import review and the Ask Claude view shell out to the Claude Code CLI, which
 needs the host's login. That is **not** part of the default compose file, so
 `docker compose up` never wires your credentials into a container on its own.
 
@@ -104,9 +109,10 @@ docker compose -f docker-compose.yml -f docker-compose.claude.yml up --build
 ```
 
 This shares the host's Claude Code login with the container. Without it the app
-runs normally and only those two features are unavailable.
+runs normally and only those two features are unavailable. Either way, nothing
+is sent until Claude is turned on in Settings.
 
-The Analysis tab also has a sign-in button: it runs `claude auth login` on the
+The Ask Claude view also has a sign-in button: it runs `claude auth login` on the
 server, shows the sign-in link, and takes the code from that page. With the
 overlay the sign-in lands in the mounted `.claude` folder and the host CLI
 shares it; without the overlay it lives inside the container and is gone once

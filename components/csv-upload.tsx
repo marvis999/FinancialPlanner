@@ -9,6 +9,7 @@ import {
   ChevronUp,
   CircleCheck,
   Loader2,
+  ShieldOff,
   Sparkles,
   Upload,
   X,
@@ -106,6 +107,8 @@ type Phase =
       checked: number;
       /** The Claude check failed; the deterministic part still stands. */
       claudeError: string | null;
+      /** Claude is switched off in Settings, so nothing was sent. */
+      claudeOff: boolean;
     }
   | { kind: "done"; outcome: ImportOutcome };
 
@@ -273,6 +276,7 @@ export function CsvUpload({
             findings: st.result?.findings ?? [],
             checked: st.result?.checked ?? 0,
             claudeError: null,
+            claudeOff: st.result?.claudeOff ?? false,
           });
         } else if (st.status === "error") {
           setPhase({
@@ -282,6 +286,7 @@ export function CsvUpload({
             findings: [],
             checked: 0,
             claudeError: st.error ?? msg("checkFailed"),
+            claudeOff: false,
           });
         }
       } catch {
@@ -466,6 +471,7 @@ export function CsvUpload({
           findings={phase.findings}
           checked={phase.checked}
           claudeError={phase.claudeError}
+          claudeOff={phase.claudeOff}
           busy={busy}
           onImport={(decisions, skipped, missing) =>
             void doImport(phase.file, decisions, skipped, missing)
@@ -643,6 +649,7 @@ function ReviewDialog({
   findings,
   checked,
   claudeError,
+  claudeOff,
   busy,
   onImport,
   onAbort,
@@ -651,6 +658,7 @@ function ReviewDialog({
   findings: ImportCheckFinding[];
   checked: number;
   claudeError: string | null;
+  claudeOff: boolean;
   busy: boolean;
   onImport: (
     decisions: ImportReviewDecision[],
@@ -824,12 +832,16 @@ function ReviewDialog({
         >
           {claudeError ? (
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          ) : claudeOff ? (
+            <ShieldOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           ) : (
             <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           )}
           <span>
             {claudeError
               ? msg("claudeFailedNote", { error: claudeError })
+              : claudeOff
+              ? msg("claudeOffNote")
               : msg("claudeChecked", { checked, total: summary.bookings.length })}
           </span>
         </p>

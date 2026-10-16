@@ -57,6 +57,8 @@ export function DemoApp() {
         initialState={snapshot.state}
         transactions={snapshot.transactions}
         today={snapshot.today}
+        // Claude never runs in the static demo.
+        claudePrivacy={{ enabled: false, hiddenNames: [] }}
       />
     </NextIntlClientProvider>
   );
