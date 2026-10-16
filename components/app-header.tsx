@@ -32,7 +32,10 @@ export function useView(): [View, (next: View) => void] {
   const raw = useSearchParams().get("view");
   const view: View = isView(raw) ? raw : "now";
   const navigate = React.useCallback((next: View) => {
-    window.history.pushState(null, "", next === "now" ? "?" : `?view=${next}`);
+    const url = new URL(window.location.href);
+    if (next === "now") url.searchParams.delete("view");
+    else url.searchParams.set("view", next);
+    window.history.pushState(null, "", url);
     window.scrollTo({ top: 0 });
   }, []);
   return [view, navigate];
