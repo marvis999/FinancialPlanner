@@ -19,6 +19,8 @@ export interface Job<T> {
   error: string | null;
   /** Free-form metadata (e.g. the question of a free analysis). */
   meta: Record<string, string>;
+  /** Stops the runner's Claude process; server-side only, never sent to the client. */
+  controller: AbortController;
 }
 
 type Store = Map<string, Job<unknown>>;
@@ -42,7 +44,7 @@ export function getJob<T>(key: string): Job<T> | undefined {
 export function startJob<T>(
   key: string,
   meta: Record<string, string>,
-  run: (progress: ProgressReporter) => Promise<T>
+  run: (progress: ProgressReporter, signal: AbortSignal) => Promise<T>
 ): Job<T> {
   const existing = jobs.get(key);
   if (existing && existing.status === "running") return existing as Job<T>;
@@ -55,6 +57,7 @@ export function startJob<T>(
     result: null,
     error: null,
     meta,
+    controller: new AbortController(),
   };
   jobs.set(key, job);
 
@@ -66,7 +69,7 @@ export function startJob<T>(
     }
   };
 
-  void run(progress)
+  void run(progress, job.controller.signal)
     .then((result) => {
       job.result = result;
       job.status = "done";
@@ -82,12 +85,18 @@ export function startJob<T>(
 }
 
 /**
- * Drop a job from the registry (finished or abandoned). A still-running runner
- * keeps writing into the orphaned object, which is harmless — the next start
- * simply registers a fresh job under the key.
+ * Drop a job from the registry (finished or abandoned) and stop its Claude
+ * process. The runner then finishes into the orphaned object, which is
+ * harmless: the next start registers a fresh job under the key.
  */
 export function deleteJob(key: string): void {
+  jobs.get(key)?.controller.abort();
   jobs.delete(key);
+}
+
+/** Stop a running job's Claude process but keep the job, so it can finish without it. */
+export function abortJob(key: string): void {
+  jobs.get(key)?.controller.abort();
 }
 
 /** Mutate the result of a finished job (e.g. resolve one suggestion). */

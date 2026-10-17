@@ -248,11 +248,29 @@ export interface ImportCheckResult {
   findings: ImportCheckFinding[];
   /** Claude is switched off in Settings: nothing was sent, no findings. */
   claudeOff?: boolean;
+  /** The user went on without waiting for Claude: its run was stopped, no findings. */
+  claudeSkipped?: boolean;
+}
+
+/** The upload behind a check job, so the page can pick the check up again after a tab switch. */
+export interface PendingCsvCheck {
+  text: string;
+  closingBalance: number | null;
+  summary: ImportSummary;
 }
 
 /** Snapshot of the pre-import check job, polled by the upload component. */
 export interface ImportCheckState extends AnalysisJobInfo {
   result: ImportCheckResult | null;
+  /** Only when asked for; null without a job. */
+  pending?: PendingCsvCheck | null;
+}
+
+/** Which Claude runs are going on right now, shown in the header on every view. */
+export interface ClaudeActivity {
+  importCheck: boolean;
+  categories: boolean;
+  question: boolean;
 }
 
 /** The user's verdict for one flagged payment, sent along with the import. */

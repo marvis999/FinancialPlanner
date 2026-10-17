@@ -21,6 +21,7 @@ import type {
   AnalysisJobInfo,
   AnalysisState,
   AppState,
+  ClaudeActivity,
   ClaudePreview,
   ClaudePreviewKind,
   ClaudePrivacy,
@@ -415,11 +416,17 @@ export async function startCsvCheckAction(
   return { ok: false, error: unavailable() };
 }
 
-export async function getCsvCheckStateAction(): Promise<ImportCheckState> {
+export async function getCsvCheckStateAction(_withPending = false): Promise<ImportCheckState> {
   return { ...IDLE_JOB, result: null };
 }
 
 export async function cancelCsvCheckAction(): Promise<void> {}
+
+export async function skipCsvCheckClaudeAction(): Promise<void> {}
+
+export async function getClaudeActivityAction(): Promise<ClaudeActivity> {
+  return { importCheck: false, categories: false, question: false };
+}
 
 export async function confirmCsvImportAction(
   _text: string,

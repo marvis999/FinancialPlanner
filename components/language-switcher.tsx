@@ -72,7 +72,8 @@ export function LanguageSwitcher() {
         <div
           role="menu"
           aria-label={msg("label")}
-          className="absolute right-0 z-50 mt-2 w-44 rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-lg"
+          // Opens to the right: the switcher sits at the left edge of Settings.
+          className="absolute left-0 z-50 mt-2 w-44 rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-lg"
         >
           {LOCALES.map((locale) => {
             const selected = locale === active;

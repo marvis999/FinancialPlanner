@@ -3,9 +3,11 @@
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { SlidersHorizontal, Upload } from "lucide-react";
+import { Loader2, SlidersHorizontal, Upload } from "lucide-react";
 
+import { getClaudeActivityAction } from "@/app/actions";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { ClaudeActivity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const VIEWS = [
@@ -123,6 +125,7 @@ export function AppHeader({
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2 py-2">
+          <ClaudeActivityIndicator onNavigate={onNavigate} />
           <Tooltip>
             <TooltipTrigger asChild>
               <ViewLink
@@ -152,6 +155,57 @@ export function AppHeader({
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * Says on every view that Claude is still at work, and leads to the view that
+ * shows the run's progress. Polls, because the runs live on the server.
+ */
+function ClaudeActivityIndicator({ onNavigate }: { onNavigate: (next: View) => void }) {
+  const msg = useTranslations("dashboard");
+  const [activity, setActivity] = React.useState<ClaudeActivity | null>(null);
+
+  React.useEffect(() => {
+    let stopped = false;
+    const poll = async () => {
+      if (document.hidden) return;
+      try {
+        const next = await getClaudeActivityAction();
+        if (!stopped) setActivity(next);
+      } catch {
+        // Transient, e.g. a server restart; the next poll recovers.
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 3000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const running: { to: View; label: string } | null = activity?.importCheck
+    ? { to: "bookings", label: msg("claudeBusyImport") }
+    : activity?.categories
+      ? { to: "bookings", label: msg("claudeBusyCategories") }
+      : activity?.question
+        ? { to: "ask", label: msg("claudeBusyQuestion") }
+        : null;
+
+  return (
+    <div role="status" aria-live="polite">
+      {running && (
+        <ViewLink
+          to={running.to}
+          onNavigate={onNavigate}
+          className="flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium text-primary transition-colors hover:bg-accent"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          {running.label}
+        </ViewLink>
+      )}
+    </div>
   );
 }
 

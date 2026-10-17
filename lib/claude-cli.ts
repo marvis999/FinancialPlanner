@@ -130,12 +130,21 @@ export function spawnClaude(args: string[]): ChildProcessWithoutNullStreams {
 
 export function runClaude(
   prompt: string,
-  opts: { timeoutMs?: number; onProgress?: (p: ClaudeProgress) => void } = {}
+  opts: {
+    timeoutMs?: number;
+    onProgress?: (p: ClaudeProgress) => void;
+    /** Kills the process; the caller checks `signal.aborted` to tell this from a failure. */
+    signal?: AbortSignal;
+  } = {}
 ): Promise<ClaudeRunResult> {
   // The last line of defence: every prompt passes here, so no caller can send
   // data while the switch in Settings is off.
   if (!claudeEnabled()) {
     return Promise.resolve({ ok: false, error: { code: "disabled" } });
+  }
+  // Stopped before it began: no CLI, so the prompt is never sent.
+  if (opts.signal?.aborted) {
+    return Promise.resolve({ ok: false, error: { code: "unexpectedResponse", detail: "aborted" } });
   }
   const timeoutMs = opts.timeoutMs ?? 300_000;
   return new Promise((resolve) => {
@@ -168,6 +177,14 @@ export function runClaude(
         error: { code: "timeout", seconds: Math.round(timeoutMs / 1000) },
       });
     }, timeoutMs);
+
+    // Settles at once: `close` waits for every holder of the pipes, and a
+    // subprocess of the CLI can keep them open after the CLI itself is gone.
+    const abort = () => {
+      child.kill();
+      done({ ok: false, error: { code: "unexpectedResponse", detail: "aborted" } });
+    };
+    opts.signal?.addEventListener("abort", abort, { once: true });
 
     let buffer = "";
     let stderr = "";
