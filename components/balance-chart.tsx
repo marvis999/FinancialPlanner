@@ -174,7 +174,7 @@ export function BalanceChart({
   onExplainNegative?: () => void;
 }) {
   const msg = useTranslations("chart");
-  const { formatMonthLabel, locale } = useFormatters();
+  const { formatMonthLabel, formatDate, formatEuro, locale } = useFormatters();
   const chartConfig = {
     actual: { label: msg("actualFull"), color: "hsl(var(--chart-1))" },
     forecast: { label: msg("forecastFull"), color: "hsl(var(--chart-2))" },
@@ -312,7 +312,7 @@ export function BalanceChart({
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-end gap-1">
+      <div className="mb-1 flex flex-wrap items-center justify-end gap-1">
         <span className="mr-auto text-[11px] text-muted-foreground">
           {domain
             ? msg("zoomWindow", {
@@ -322,35 +322,61 @@ export function BalanceChart({
               })
             : msg("zoomHint")}
         </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={() => zoomAt((minTs + maxTs) / 2, 0.6)}
-          aria-label={msg("zoomIn")}
-        >
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={() => zoomAt((minTs + maxTs) / 2, 1.7)}
-          disabled={domain === null}
-          aria-label={msg("zoomOut")}
-        >
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-          onClick={() => setDomain(null)}
-          disabled={domain === null}
-          aria-label={msg("zoomReset")}
-        >
-          <RotateCcw className="h-4 w-4" />
-        </Button>
+        {/* Above the plot, not on it: a bubble on the curve hid the forecast behind it. */}
+        {negativeAt && (
+          <span
+            role="group"
+            aria-label={msg("negativeLabel", {
+              date: formatDate(negativeAt.date),
+              amount: formatEuro(negativeAt.balance),
+            })}
+            className="mr-2 flex items-center gap-1.5 text-xs"
+          >
+            <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />
+            <span className="font-semibold text-destructive">{formatEuro(negativeAt.balance)}</span>
+            <span className="text-muted-foreground">{formatDate(negativeAt.date)}</span>
+            {onExplainNegative && (
+              <button
+                type="button"
+                onClick={onExplainNegative}
+                className="rounded text-destructive underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {msg("showCalculation")}
+              </button>
+            )}
+          </span>
+        )}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => zoomAt((minTs + maxTs) / 2, 0.6)}
+            aria-label={msg("zoomIn")}
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => zoomAt((minTs + maxTs) / 2, 1.7)}
+            disabled={domain === null}
+            aria-label={msg("zoomOut")}
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setDomain(null)}
+            disabled={domain === null}
+            aria-label={msg("zoomReset")}
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <div
         ref={wrapRef}
@@ -498,16 +524,10 @@ export function BalanceChart({
                 y={negativeAt.balance}
                 ifOverflow="discard"
                 shape={(props: { cx?: number; cy?: number }) => (
-                  <NegativeMarker
-                    cx={props.cx ?? 0}
-                    cy={props.cy ?? 0}
-                    // Past the middle of the view the bubble opens to the left,
-                    // so it stays inside the plot.
-                    openLeft={tsOf(negativeAt.date) > (minTs + maxTs) / 2}
-                    date={negativeAt.date}
-                    balance={negativeAt.balance}
-                    onExplain={onExplainNegative}
-                  />
+                  <g aria-hidden>
+                    <circle cx={props.cx} cy={props.cy} r={11} fill="hsl(var(--destructive))" fillOpacity={0.2} />
+                    <circle cx={props.cx} cy={props.cy} r={5} fill="hsl(var(--destructive))" />
+                  </g>
                 )}
               />
             )}
@@ -515,68 +535,5 @@ export function BalanceChart({
         </ChartContainer>
       </div>
     </div>
-  );
-}
-
-const BUBBLE_WIDTH = 200;
-const BUBBLE_HEIGHT = 64;
-
-/**
- * A red dot where the forecast first drops below zero, with a bubble holding
- * the amount and the way into the calculation. Drawn inside the SVG through
- * foreignObject so it moves with zoom and pan like the curve does.
- */
-function NegativeMarker({
-  cx,
-  cy,
-  openLeft,
-  date,
-  balance,
-  onExplain,
-}: {
-  cx: number;
-  cy: number;
-  openLeft: boolean;
-  date: string;
-  balance: number;
-  onExplain?: () => void;
-}) {
-  const msg = useTranslations("chart");
-  const { formatDate, formatEuro } = useFormatters();
-  const x = openLeft ? cx - 14 - BUBBLE_WIDTH : cx + 14;
-  // Above the dot when there is room, otherwise below it.
-  const y = cy - BUBBLE_HEIGHT - 8 >= 0 ? cy - BUBBLE_HEIGHT - 8 : cy + 10;
-  return (
-    <g>
-      <circle cx={cx} cy={cy} r={11} fill="hsl(var(--destructive))" fillOpacity={0.2} />
-      <circle cx={cx} cy={cy} r={5} fill="hsl(var(--destructive))" />
-      <foreignObject x={x} y={y} width={BUBBLE_WIDTH} height={BUBBLE_HEIGHT}>
-        <div
-          role="group"
-          aria-label={msg("negativeLabel", {
-            date: formatDate(date),
-            amount: formatEuro(balance),
-          })}
-          // Keeps a click on the bubble from starting a drag of the chart.
-          onPointerDown={(event) => event.stopPropagation()}
-          className="flex h-full flex-col justify-center gap-1 rounded-lg border border-destructive/40 bg-popover px-3 text-xs shadow-md"
-        >
-          <div className="flex items-center gap-1.5">
-            <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />
-            <span className="font-semibold text-destructive">{formatEuro(balance)}</span>
-            <span className="text-muted-foreground">{formatDate(date)}</span>
-          </div>
-          {onExplain && (
-            <button
-              type="button"
-              onClick={onExplain}
-              className="self-start rounded text-destructive underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {msg("showCalculation")}
-            </button>
-          )}
-        </div>
-      </foreignObject>
-    </g>
   );
 }

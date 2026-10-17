@@ -122,6 +122,18 @@ describe("parseImportCheckAnswer", () => {
     });
   });
 
+  it("never moves a booking out of income", () => {
+    const income = toCheckPayments([
+      record({ name: "Familienkasse", purpose: "Kindergeld", amount: 259, fingerprint: "fp-k" }),
+    ]);
+    const findings = parseImportCheckAnswer(
+      [{ id: "t1", category: "sonstiges", reason: "'einkommen' is not a valid category" }],
+      income,
+      []
+    );
+    expect(findings).toEqual([]);
+  });
+
   it("drops categories outside the catalog or equal to the current one", () => {
     const findings = parseImportCheckAnswer(
       [

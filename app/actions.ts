@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 
 import * as db from "@/lib/db";
 import {
+  abortJob,
   deleteJob,
   getJob,
   startJob,
@@ -68,6 +69,7 @@ import type {
   AppState,
   CategoryAnalysisState,
   CategorySuggestion,
+  ClaudeActivity,
   ClaudeAuthStatus,
   ClaudePreview,
   ClaudePreviewKind,
@@ -585,9 +587,15 @@ export async function startCsvCheckAction(
   const payments = toCheckPayments(fresh);
   const oneoffs = db.listOneOff();
   const taken = new Set(summary.recurringMatches.map((match) => match.fingerprint));
+  // Kept with the job, so the page can resume the check after a tab switch.
+  const meta = {
+    text,
+    closingBalance: closingBalance === undefined ? "" : String(closingBalance),
+    summary: JSON.stringify(summary),
+  };
   if (!claudeEnabled()) {
     // The review still opens: the recurring matches above need no Claude.
-    startJob<ImportCheckResult>(IMPORT_CHECK_JOB, {}, async () => ({
+    startJob<ImportCheckResult>(IMPORT_CHECK_JOB, meta, async () => ({
       newCount: fresh.length,
       checked: 0,
       findings: [],
@@ -596,7 +604,7 @@ export async function startCsvCheckAction(
     return { ok: true, started: true, summary };
   }
   const masker = newMasker();
-  startJob<ImportCheckResult>(IMPORT_CHECK_JOB, {}, async (progress) => {
+  startJob<ImportCheckResult>(IMPORT_CHECK_JOB, meta, async (progress, signal) => {
     progress(
       msg("newBookings", { count: fresh.length }) +
         (payments.length < fresh.length
@@ -619,7 +627,11 @@ export async function startCsvCheckAction(
     progress(msg("startingClaude", { model: CLAUDE_MODEL }));
     const run = await runClaude(prompt, {
       onProgress: (phase) => progress(claudePhaseLine(msg, phase), { replaceLast: true }),
+      signal,
     });
+    if (signal.aborted) {
+      return { newCount: fresh.length, checked: 0, findings: [], claudeSkipped: true };
+    }
     if (!run.ok) throw new Error(claudeErrorMessage(msg, run.error));
 
     progress(msg("parsingAnswer"));
@@ -647,18 +659,35 @@ export async function startCsvCheckAction(
   return { ok: true, started: true, summary };
 }
 
-/** Snapshot of the pre-import check job, polled by the upload component. */
-export async function getCsvCheckStateAction(): Promise<ImportCheckState> {
+/**
+ * Snapshot of the pre-import check job, polled by the upload component.
+ * `withPending` adds the upload itself, for picking the check up again after
+ * a tab switch; the polls leave it out, since the file can be large.
+ */
+export async function getCsvCheckStateAction(withPending = false): Promise<ImportCheckState> {
   const job = getJob<ImportCheckResult>(IMPORT_CHECK_JOB);
   return {
     ...jobInfo(job),
     result: job?.status === "done" ? job.result : null,
+    pending:
+      withPending && job?.meta.summary
+        ? {
+            text: job.meta.text,
+            closingBalance: job.meta.closingBalance === "" ? null : Number(job.meta.closingBalance),
+            summary: JSON.parse(job.meta.summary) as ImportSummary,
+          }
+        : null,
   };
 }
 
-/** Abort: drop the check job so a later upload starts clean. */
+/** Abort: drop the check job and stop its Claude run, so a later upload starts clean. */
 export async function cancelCsvCheckAction(): Promise<void> {
   deleteJob(IMPORT_CHECK_JOB);
+}
+
+/** Go on without Claude: stop its run, and the check finishes with the app's own matches. */
+export async function skipCsvCheckClaudeAction(): Promise<void> {
+  abortJob(IMPORT_CHECK_JOB);
 }
 
 /**
@@ -1037,7 +1066,7 @@ function buildMerchantGroups(transactions: TransactionItem[]): MerchantGroup[] {
     g.count++;
     g.total += transaction.amount;
     if (g.samples.length < 2 && transaction.purpose) {
-      g.samples.push(transaction.purpose.slice(0, 90));
+      g.samples.push(transaction.purpose);
     }
   }
   const list = [...groups.values()]
@@ -1064,7 +1093,8 @@ function categoryAnalysisPrompt(
         currentCategory: group.category,
         bookings: group.count,
         total: Math.round(group.total * 100) / 100,
-        samples: group.samples.map(mask),
+        // Masked before cutting, so a cut cannot leave half an IBAN behind.
+        samples: group.samples.map((sample) => mask(sample).slice(0, 90)),
       })
     )
     .join("\n");
@@ -1195,7 +1225,7 @@ export async function startCategoryAnalysisAction(): Promise<AnalysisState> {
   const transactions = db.listTransactions();
   if (transactions.length && claudeEnabled()) {
     const masker = newMasker();
-    startJob<CategorySuggestion[]>(CATEGORY_JOB, {}, async (progress) => {
+    startJob<CategorySuggestion[]>(CATEGORY_JOB, {}, async (progress, signal) => {
       const groups = buildMerchantGroups(transactions);
       progress(
         msg("groupsPrepared", {
@@ -1209,6 +1239,7 @@ export async function startCategoryAnalysisAction(): Promise<AnalysisState> {
       progress(msg("startingClaude", { model: CLAUDE_MODEL }));
       const run = await runClaude(prompt, {
         onProgress: (phase) => progress(claudePhaseLine(msg, phase), { replaceLast: true }),
+        signal,
       });
       if (!run.ok) throw new Error(claudeErrorMessage(msg, run.error));
 
@@ -1286,11 +1317,12 @@ export async function startFreeAnalysisAction(
     masker.mask
   );
 
-  startJob<string>(FREE_JOB, { question: asked }, async (progress) => {
+  startJob<string>(FREE_JOB, { question: asked }, async (progress, signal) => {
     progress(msg("contextAssembled"));
     progress(msg("startingClaude", { model: CLAUDE_MODEL }));
     const run = await runClaude(prompt, {
       onProgress: (phase) => progress(claudePhaseLine(msg, phase), { replaceLast: true }),
+      signal,
     });
     if (!run.ok) throw new Error(claudeErrorMessage(msg, run.error));
     return masker.unmask(run.text);
@@ -1312,6 +1344,16 @@ function jobInfo(job: Job<unknown> | undefined): AnalysisJobInfo {
 }
 
 /** Snapshot of both analysis jobs, polled by the Analyse tab. */
+/** Which Claude runs are going on, for the header on every view. */
+export async function getClaudeActivityAction(): Promise<ClaudeActivity> {
+  const running = (key: string) => getJob(key)?.status === "running";
+  return {
+    importCheck: running(IMPORT_CHECK_JOB),
+    categories: running(CATEGORY_JOB),
+    question: running(FREE_JOB),
+  };
+}
+
 export async function getAnalysisStateAction(): Promise<AnalysisState> {
   const catJob = getJob<CategorySuggestion[]>(CATEGORY_JOB);
   const freeJob = getJob<string>(FREE_JOB);

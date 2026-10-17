@@ -53,6 +53,24 @@ describe("the Claude switch", () => {
     expect(await cli.runClaude("hello")).toEqual({ ok: false, error: { code: "disabled" } });
   });
 
+  it("never starts the CLI for a run that was stopped before it began", async () => {
+    const spawn = vi.fn(() => {
+      throw new Error("spawned");
+    });
+    vi.doMock("child_process", () => ({ spawn }));
+    try {
+      const { cli, actions } = await load();
+      await actions.setClaudeEnabledAction(true);
+      expect(await cli.runClaude("hello", { signal: AbortSignal.abort() })).toEqual({
+        ok: false,
+        error: { code: "unexpectedResponse", detail: "aborted" },
+      });
+      expect(spawn).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock("child_process");
+    }
+  });
+
   it("still opens the import review while off, without findings and without sending", async () => {
     const { actions } = await load();
     const res = await actions.startCsvCheckAction([HEADER, ROW].join("\n"), 1000);
@@ -106,6 +124,19 @@ describe("the preview of what Claude receives", () => {
 
     const question = await actions.previewClaudePromptAction("question", "Was schulde ich Max Mustermann?");
     expect(question.prompt).toContain("The user's question: Was schulde ich [NAME-1]?");
+  });
+
+  it("masks a category sample before cutting it, so no part of an IBAN gets through", async () => {
+    const { actions, db } = await load();
+    const iban = "DE89 3704 0044 0532 0130 00";
+    // The cut at 90 characters falls inside the IBAN, after "DE89 3704 0044 05".
+    const purpose = "Nebenkosten ".repeat(6).padEnd(73) + iban;
+    db.importTransactions([{ ...PRIVATE_BOOKING, name: "Hausverwaltung", purpose }], 0);
+
+    const preview = await actions.previewClaudePromptAction("categories");
+    expect(preview.ok).toBe(true);
+    expect(preview.prompt).toContain("[IBAN-1]");
+    expect(preview.prompt).not.toMatch(/DE89|3704/);
   });
 
   it("explains that there is nothing to preview without bookings", async () => {

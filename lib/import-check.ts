@@ -1,4 +1,4 @@
-import { ALL_CATEGORIES, categorize } from "./categories";
+import { ALL_CATEGORIES, categorize, INCOME_CATEGORY } from "./categories";
 import type {
   ImportCheckFinding,
   ImportExpectedDue,
@@ -159,7 +159,10 @@ export function parseImportCheckAnswer(
     if (!payment || seenPayments.has(payment.tid)) continue;
 
     const current = categorize(payment.record);
+    // Income is not in the catalog the model sees, so it reads "einkommen" as
+    // an invalid category and suggests moving salary to "sonstiges".
     const category =
+      current !== INCOME_CATEGORY.key &&
       typeof item.category === "string" &&
       validKeys.has(item.category) &&
       item.category !== current

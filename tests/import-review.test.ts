@@ -210,6 +210,22 @@ describe("startCsvCheckAction", () => {
     expect(res.needsBalance?.rows).toBe(1);
   });
 
+  it("keeps the upload with the job, so the page can pick the check up again", async () => {
+    const { actions } = await load();
+    const text = csv(row());
+    const res = await actions.startCsvCheckAction(text, 100);
+    expect(res).toMatchObject({ ok: true, started: true });
+    // The polls leave the file out; only the resume asks for it.
+    expect((await actions.getCsvCheckStateAction()).pending).toBeNull();
+    expect((await actions.getCsvCheckStateAction(true)).pending).toEqual({
+      text,
+      closingBalance: 100,
+      summary: res.summary,
+    });
+    await actions.cancelCsvCheckAction();
+    expect((await actions.getCsvCheckStateAction(true)).pending).toBeNull();
+  });
+
   it("rejects a file that is not an Umsatz CSV", async () => {
     const { actions } = await load();
     const res = await actions.startCsvCheckAction("hello;world");

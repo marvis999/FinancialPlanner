@@ -7,17 +7,13 @@ import { ChevronDown, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ALL_CATEGORIES, categoryByKey, effectiveCategory } from "@/lib/categories";
 import { anchorAgeInDays, budgetPeriodOf, daysInWindow } from "@/lib/period";
 import { addMonthsClamped, projectBudgetSpend } from "@/lib/projection";
@@ -105,6 +101,9 @@ export function BudgetsCard({
     ? anchorAgeInDays(refDate, today)
     : 0;
   const dataIsStale = dataLagDays > 7;
+  // A finished period stays on screen until the next import. Say so at once,
+  // or "day 30/30" of last month reads as today.
+  const periodOver = today > period.end;
   // Only the days inside the period count against the projection: a lag that
   // runs past the period's end leaves the bar for a finished period as it is.
   const missingDays = dataIsStale
@@ -208,7 +207,7 @@ export function BudgetsCard({
 
   return (
     <div className="space-y-4">
-      {budgets.length > 0 && dataIsStale && (
+      {budgets.length > 0 && (dataIsStale || periodOver) && (
         <p className="text-xs text-muted-foreground">
           {missingDays > 0
             ? msg("staleData", { date: formatDate(refDate), days: missingDays })
@@ -217,6 +216,27 @@ export function BudgetsCard({
       )}
       {budgets.length > 0 && (
         <div className="space-y-4">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-hidden>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-3.5 rounded-sm bg-success" />
+              {msg("legendSpent")}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2 w-3.5 rounded-sm text-success opacity-70"
+                style={{ backgroundImage: "repeating-linear-gradient(45deg, currentColor 0 2px, transparent 2px 5px)" }}
+              />
+              {msg("legendProjection")}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-3 w-0.5 rounded-full bg-foreground" />
+              {msg("legendLimit")}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-0 w-0 border-x-[5px] border-t-[6px] border-x-transparent border-t-muted-foreground" />
+              {msg("legendPace")}
+            </span>
+          </div>
           {budgets.map((budget) => {
             const categoryInfo = categoryByKey(budget.category);
             const spent = spentByCat.get(budget.category) ?? 0;
@@ -234,205 +254,220 @@ export function BudgetsCard({
             const avg = avgByCat.get(budget.category) ?? 0;
             const over = spent > budget.amount;
             const projectedOver = paceReliable && projected > budget.amount;
-            const pct = Math.min(100, (spent / budget.amount) * 100);
-            // Where this period's average pace lands at its end, on the
-            // 0..budget scale of the bar (pinned to the edge when over).
-            const projectedPct = Math.min(100, (projected / budget.amount) * 100);
             const remaining = budget.amount - spent;
+            // One scale per bar: the budget, or further when the spend or the
+            // projection runs past it, plus a little room so the limit line
+            // never sits on the very edge.
+            const reach =
+              Math.max(budget.amount, spent, paceReliable ? projected : 0) * 1.04;
+            const positionOf = (value: number) => `${(Math.min(Math.max(value, 0), reach) / reach) * 100}%`;
+            const status = over ? "over" : projectedOver ? "warn" : "ok";
+            const statusFill = {
+              ok: "bg-success",
+              warn: "bg-amber-500 dark:bg-amber-400",
+              over: "bg-destructive",
+            }[status];
+            const statusText = {
+              ok: "text-success",
+              warn: "text-amber-600 dark:text-amber-400",
+              over: "text-destructive",
+            }[status];
+            const periodRunning = elapsedDays < totalDays;
+            const statusLine = over
+              ? msg("overShort")
+              : projectedOver
+                ? msg("leftEndsAt", { amount: formatEuro(projected) })
+                : msg("left");
             return (
               <div key={budget.id}>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
-                    style={{ backgroundColor: `var(${categoryInfo.cssVar})` }}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {categoryLabel(budget.category)}
-                  </span>
-                  <span className="font-mono text-sm tabular-nums">
-                    <span className={cn(over && "font-semibold text-destructive")}>
-                      {formatEuro(spent)}
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 sm:grid-cols-[11rem_minmax(0,1fr)_auto]">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                      style={{ backgroundColor: `var(${categoryInfo.cssVar})` }}
+                    />
+                    <span className="truncate text-sm font-medium">
+                      {categoryLabel(budget.category)}
                     </span>
-                    <span className="text-muted-foreground">
-                      {" "}
-                      {msg("ofLimit", { limit: formatEuro(budget.amount) })}
-                    </span>
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => startEdit(budget)}
-                    disabled={disabled}
-                    aria-label={msg("editAria", { category: categoryLabel(budget.category) })}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => onDelete(budget.id)}
-                    disabled={disabled}
-                    aria-label={msg("deleteAria", { category: categoryLabel(budget.category) })}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <HoverCard openDelay={100} closeDelay={50}>
-                  <HoverCardTrigger asChild>
-                    <div className="relative mt-1.5 h-2 cursor-help overflow-hidden rounded-full bg-muted">
+                  </div>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor: over
-                            ? "hsl(var(--destructive))"
-                            : `var(${categoryInfo.cssVar})`,
-                        }}
-                      />
-                      {projected > 0 && paceReliable && (
+                        tabIndex={0}
+                        role="img"
+                        aria-label={msg("barAria", {
+                          category: categoryLabel(budget.category),
+                          spent: formatEuro(spent),
+                          limit: formatEuro(budget.amount),
+                        })}
+                        className="relative col-span-2 row-start-2 h-7 cursor-help rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:col-span-1 sm:col-start-2 sm:row-start-1"
+                      >
+                        <div className="absolute inset-x-0 top-2.5 h-2.5 rounded-full bg-muted" />
+                        {paceReliable && projected > spent && (
+                          <div
+                            className={cn("absolute top-2.5 h-2.5 rounded-full opacity-60", statusText)}
+                            style={{
+                              width: positionOf(projected),
+                              backgroundImage:
+                                "repeating-linear-gradient(45deg, currentColor 0 3px, transparent 3px 7px)",
+                            }}
+                            aria-hidden
+                          />
+                        )}
                         <div
-                          className="absolute inset-y-0 w-0.5 -translate-x-1/2 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)] transition-all"
-                          style={{ left: `${projectedPct}%` }}
+                          className={cn("absolute top-2.5 h-2.5 rounded-full transition-all", statusFill)}
+                          style={{ width: positionOf(Math.min(spent, budget.amount)) }}
                           aria-hidden
                         />
-                      )}
-                    </div>
-                  </HoverCardTrigger>
-                  <HoverCardContent className="w-96 max-w-[calc(100vw-2rem)] text-xs" sideOffset={6}>
-                    <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                      <span className="font-medium">{categoryLabel(budget.category)}</span>
-                      <span className="text-muted-foreground">
-                        {formatDate(period.start)} - {formatDate(period.end)} ·{" "}
-                        {msg("dayOfPeriod", { elapsed: elapsedDays, total: totalDays })}
-                      </span>
-                    </div>
-                    <dl className="grid gap-1">
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">{msg("spent")}</dt>
-                        <dd className="font-mono tabular-nums">
-                          {msg("spentOf", {
-                            spent: formatEuro(spent),
-                            limit: formatEuro(budget.amount),
-                          })}
-                        </dd>
+                        {over && (
+                          <div
+                            className="absolute top-2.5 h-2.5 rounded-r-full bg-destructive"
+                            style={{
+                              left: positionOf(budget.amount),
+                              width: `calc(${positionOf(spent)} - ${positionOf(budget.amount)})`,
+                              // Striped, so the part past the limit reads apart from the rest.
+                              backgroundImage:
+                                "repeating-linear-gradient(45deg, rgba(0,0,0,0.3) 0 3px, transparent 3px 6px)",
+                            }}
+                            aria-hidden
+                          />
+                        )}
+                        <div
+                          className="absolute top-1 h-5 w-0.5 -translate-x-1/2 rounded-full bg-foreground"
+                          style={{ left: positionOf(budget.amount) }}
+                          aria-hidden
+                        />
+                        {periodRunning && (
+                          <div
+                            className="absolute top-0 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[6px] border-x-transparent border-t-muted-foreground"
+                            style={{ left: positionOf((budget.amount * elapsedDays) / totalDays) }}
+                            aria-hidden
+                          />
+                        )}
                       </div>
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">
-                          {remaining >= 0 ? msg("freeToLimit") : msg("overLimit")}
-                        </dt>
-                        <dd
-                          className={cn(
-                            "font-mono tabular-nums",
-                            remaining < 0 && "font-medium text-destructive"
-                          )}
-                        >
-                          {formatEuro(Math.abs(remaining))}
-                        </dd>
+                    </TooltipTrigger>
+                    <TooltipContent className="w-96 max-w-[calc(100vw-2rem)] whitespace-normal p-3 text-xs">
+                      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                        <span className="font-medium">{categoryLabel(budget.category)}</span>
+                        <span className="text-muted-foreground">
+                          {formatDate(period.start)} - {formatDate(period.end)} ·{" "}
+                          {msg("dayOfPeriod", { elapsed: elapsedDays, total: totalDays })}
+                        </span>
                       </div>
-                      {paceReliable ? (
-                        <>
+                      <dl className="grid gap-1">
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-muted-foreground">{msg("spent")}</dt>
+                          <dd className="tabular-nums">
+                            {msg("spentOf", {
+                              spent: formatEuro(spent),
+                              limit: formatEuro(budget.amount),
+                            })}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <dt className="text-muted-foreground">
+                            {remaining >= 0 ? msg("freeToLimit") : msg("overLimit")}
+                          </dt>
+                          <dd className={cn("tabular-nums", remaining < 0 && "font-medium text-destructive")}>
+                            {formatEuro(Math.abs(remaining))}
+                          </dd>
+                        </div>
+                        {paceReliable ? (
+                          <>
+                            <div className="flex justify-between gap-3 border-t pt-1">
+                              <dt className="text-muted-foreground">
+                                {msg("projectionAt", { date: formatDate(period.end) })}
+                              </dt>
+                              <dd className={cn("tabular-nums", projectedOver && "font-medium text-destructive")}>
+                                {formatEuro(projected)}
+                              </dd>
+                            </div>
+                            {fixed > 0 && (
+                              <>
+                                <div className="flex justify-between gap-3">
+                                  <dt className="text-muted-foreground">{msg("fixedShare")}</dt>
+                                  <dd className="tabular-nums">{formatEuro(fixed)}</dd>
+                                </div>
+                                <div className="text-muted-foreground">
+                                  {msg("fixedItems", { names: charges.items.join(", ") })}
+                                  {charges.due > 0 &&
+                                    msg("fixedStillDue", { amount: formatEuro(charges.due) })}
+                                </div>
+                              </>
+                            )}
+                            {variable > 0 && (
+                              <div className="flex justify-between gap-3">
+                                <dt className="text-muted-foreground">{msg("perDayLabel")}</dt>
+                                <dd className="tabular-nums">{formatEuro(perDay)}</dd>
+                              </div>
+                            )}
+                            <div className="flex justify-between gap-3">
+                              <dt className="text-muted-foreground">
+                                {projectedOver ? msg("projectionOver") : msg("projectionBuffer")}
+                              </dt>
+                              <dd className={cn("tabular-nums", projectedOver && "font-medium text-destructive")}>
+                                {formatEuro(Math.abs(budget.amount - projected))}
+                              </dd>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="border-t pt-1 text-muted-foreground">
+                            {msg("tooFewDaysShort")}
+                          </div>
+                        )}
+                        {avg > 0 && comparableMonths > 0 && (
                           <div className="flex justify-between gap-3 border-t pt-1">
                             <dt className="text-muted-foreground">
-                              {msg("projectionAt", { date: formatDate(period.end) })}
+                              {msg("lastPeriodsLabel", { count: comparableMonths })}
                             </dt>
-                            <dd
-                              className={cn(
-                                "font-mono tabular-nums",
-                                projectedOver && "font-medium text-destructive"
-                              )}
-                            >
-                              {formatEuro(projected)}
-                            </dd>
+                            <dd className="tabular-nums">{formatEuro(avg)}</dd>
                           </div>
-                          {fixed > 0 && (
-                            <>
-                              <div className="flex justify-between gap-3">
-                                <dt className="text-muted-foreground">
-                                  {msg("fixedShare")}
-                                </dt>
-                                <dd className="font-mono tabular-nums">
-                                  {formatEuro(fixed)}
-                                </dd>
-                              </div>
-                              <div className="text-muted-foreground">
-                                {msg("fixedItems", { names: charges.items.join(", ") })}
-                                {charges.due > 0 &&
-                                  msg("fixedStillDue", { amount: formatEuro(charges.due) })}
-                              </div>
-                            </>
-                          )}
-                          <div className="flex justify-between gap-3">
-                            <dt className="text-muted-foreground">
-                              {msg("stillToCome")}
-                            </dt>
-                            <dd className="font-mono tabular-nums">
-                              {formatEuro(Math.max(0, projected - spent))}
-                            </dd>
-                          </div>
-                          <div className="flex justify-between gap-3">
-                            <dt className="text-muted-foreground">
-                              {projectedOver
-                                ? msg("projectionOver")
-                                : msg("projectionBuffer")}
-                            </dt>
-                            <dd
-                              className={cn(
-                                "font-mono tabular-nums",
-                                projectedOver && "font-medium text-destructive"
-                              )}
-                            >
-                              {formatEuro(Math.abs(budget.amount - projected))}
-                            </dd>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="border-t pt-1 text-muted-foreground">
-                          {msg("tooFewDaysShort")}
-                        </div>
-                      )}
-                    </dl>
-                  </HoverCardContent>
-                </HoverCard>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {paceReliable ? (
-                    <>
-                      {msg("projection")}{" "}
-                      <span
+                        )}
+                      </dl>
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <div className="flex items-center justify-end gap-1 sm:col-start-3">
+                    <div className="mr-1 text-right">
+                      <div
                         className={cn(
-                          "font-mono tabular-nums",
-                          projectedOver
-                            ? "font-medium text-destructive"
-                            : "text-foreground"
+                          "text-base font-semibold tabular-nums",
+                          over && "text-destructive"
                         )}
                       >
-                        {formatEuro(projected)}
-                      </span>
-                      {projectedOver && (
-                        <span className="text-destructive">{msg("overBudget")}</span>
-                      )}
-                    </>
-                  ) : (
-                    <>{msg("tooFewDays")}</>
-                  )}
-                  {variable > 0 && paceReliable && (
-                    <>
-                      {msg("perDay")}
-                      <span className="font-mono tabular-nums">
-                        {formatEuro(perDay)}
-                      </span>
-                    </>
-                  )}
-                  {avg > 0 && comparableMonths > 0 && (
-                    <>
-                      {msg("lastPeriods", { count: comparableMonths })}
-                      <span className="font-mono tabular-nums">
-                        {formatEuro(avg)}
-                      </span>
-                    </>
-                  )}
-                </p>
+                        {over ? `+${formatEuro(-remaining)}` : formatEuro(remaining)}
+                      </div>
+                      <div className={cn("hidden text-xs sm:block", status === "ok" ? "text-muted-foreground" : statusText)}>
+                        {statusLine}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => startEdit(budget)}
+                      disabled={disabled}
+                      aria-label={msg("editAria", { category: categoryLabel(budget.category) })}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => onDelete(budget.id)}
+                      disabled={disabled}
+                      aria-label={msg("deleteAria", { category: categoryLabel(budget.category) })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  {/* On a phone the status goes under the bar, so the name keeps its room. */}
+                  <div className={cn("col-span-2 row-start-3 text-xs sm:hidden", status === "ok" ? "text-muted-foreground" : statusText)}>
+                    {statusLine}
+                  </div>
+                </div>
                 <BudgetItemsPanel
                   items={periodTxByCat.get(budget.category) ?? []}
                   open={openLists.has(budget.id)}

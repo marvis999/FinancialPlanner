@@ -2,20 +2,33 @@
 
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import { Check, Eye, ShieldCheck } from "lucide-react";
+import { Eye, Plus, ShieldCheck, X } from "lucide-react";
 
 import { setClaudeEnabledAction, setHiddenNamesAction } from "@/app/actions";
 import { ClaudePreviewDialog } from "@/components/claude-preview-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ClaudePrivacy } from "@/lib/types";
 
+/** What lib/pii-mask.ts hides without being told; keep in step with it. */
+const ALWAYS_HIDDEN = [
+  "alwaysIban",
+  "alwaysCards",
+  "alwaysContact",
+  "alwaysAddress",
+  "alwaysReferences",
+  "alwaysCodes",
+] as const;
+
 /**
- * The switch that decides whether anything is sent to Claude, and the names
- * hidden from it. The server enforces both; this only edits them.
+ * The switch that decides whether anything is sent to Claude, what is always
+ * hidden, and the names the user adds on top. The server enforces all of it;
+ * this only edits the switch and the name list.
  */
 export function ClaudePrivacyCard({
   privacy,
@@ -25,12 +38,10 @@ export function ClaudePrivacyCard({
   onChange: (next: ClaudePrivacy) => void;
 }) {
   const msg = useTranslations("claudePrivacy");
-  const msgCommon = useTranslations("common");
-  const [names, setNames] = React.useState(privacy.hiddenNames.join("\n"));
+  const [name, setName] = React.useState("");
+  const [problem, setProblem] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const [saved, setSaved] = React.useState(false);
   const [previewOpen, setPreviewOpen] = React.useState(false);
-  const savedNames = privacy.hiddenNames.join("\n");
 
   async function toggle(enabled: boolean) {
     setBusy(true);
@@ -41,18 +52,35 @@ export function ClaudePrivacyCard({
     }
   }
 
-  async function saveNames(event: React.FormEvent) {
-    event.preventDefault();
+  /** Whether the list was saved; on failure the reason is shown under the input. */
+  async function saveNames(names: string[]): Promise<boolean> {
     setBusy(true);
+    setProblem(null);
     try {
-      const next = await setHiddenNamesAction(names);
-      onChange(next);
-      // Show the list as stored: trimmed, without blanks and duplicates.
-      setNames(next.hiddenNames.join("\n"));
-      setSaved(true);
+      onChange(await setHiddenNamesAction(names.join("\n")));
+      return true;
+    } catch {
+      setProblem(msg("namesSaveFailed"));
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function add(event: React.FormEvent) {
+    event.preventDefault();
+    const entry = name.trim();
+    // Same rules as the server (parseHiddenNames), said before the round trip.
+    if (entry.length < 2) {
+      setProblem(msg("namesTooShort"));
+      return;
+    }
+    if (privacy.hiddenNames.some((existing) => existing.toLowerCase() === entry.toLowerCase())) {
+      setProblem(msg("namesDuplicate", { name: entry }));
+      return;
+    }
+    // Keep what was typed when the save fails, so it can be sent again.
+    if (await saveNames([...privacy.hiddenNames, entry])) setName("");
   }
 
   return (
@@ -76,42 +104,92 @@ export function ClaudePrivacyCard({
             </div>
           </div>
 
-          <form onSubmit={saveNames} className="space-y-2">
-            <Label htmlFor="claude-hidden-names" className="flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" aria-hidden />
-              {msg("namesLabel")}
-            </Label>
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
+            <h3 className="flex items-center gap-1.5 text-sm font-medium">
+              <ShieldCheck className="h-4 w-4 text-success" aria-hidden />
+              {msg("alwaysHiddenTitle")}
+            </h3>
+            <p className="text-xs text-muted-foreground">{msg("alwaysHiddenIntro")}</p>
+            <ul className="flex flex-wrap gap-1.5">
+              {ALWAYS_HIDDEN.map((key) => (
+                <li key={key} className="rounded-md bg-background px-2 py-1 text-xs dark:bg-accent">
+                  {msg(key)}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">{msg("neverSent")}</p>
+          </div>
+
+          <div className="max-w-md space-y-2">
+            <Label htmlFor="claude-hidden-name">{msg("namesLabel")}</Label>
             <p id="claude-hidden-names-hint" className="text-xs text-muted-foreground">
               {msg("namesHint")}
             </p>
-            <textarea
-              id="claude-hidden-names"
-              aria-describedby="claude-hidden-names-hint"
-              value={names}
-              onChange={(event) => {
-                setNames(event.target.value);
-                setSaved(false);
-              }}
-              placeholder={msg("namesPlaceholder")}
-              rows={4}
-              className="w-full max-w-md resize-y rounded-md border bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            <div className="flex items-center gap-3">
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={busy || names === savedNames}
-              >
-                {msgCommon("save")}
+            <form onSubmit={add} className="flex gap-2">
+              <Input
+                id="claude-hidden-name"
+                aria-describedby="claude-hidden-names-hint"
+                aria-invalid={problem !== null}
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setProblem(null);
+                }}
+                placeholder={msg("namesPlaceholder")}
+                maxLength={100}
+              />
+              <Button type="submit" variant="secondary" disabled={busy || !name.trim()}>
+                <Plus className="mr-1.5 h-4 w-4" aria-hidden />
+                {msg("namesAdd")}
               </Button>
-              {saved && (
-                <span role="status" className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Check className="h-3.5 w-3.5" aria-hidden />
-                  {msg("saved")}
-                </span>
-              )}
+            </form>
+            {problem && (
+              <p role="alert" className="text-xs text-destructive">
+                {problem}
+              </p>
+            )}
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{msg("namesColumn")}</TableHead>
+                    <TableHead className="w-12">
+                      <span className="sr-only">{msg("namesActions")}</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {privacy.hiddenNames.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-sm text-muted-foreground">
+                        {msg("namesEmpty")}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    privacy.hiddenNames.map((entry) => (
+                      <TableRow key={entry}>
+                        <TableCell className="font-medium">{entry}</TableCell>
+                        <TableCell className="py-1 text-right">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={busy}
+                            aria-label={msg("namesRemove", { name: entry })}
+                            onClick={() =>
+                              void saveNames(privacy.hiddenNames.filter((existing) => existing !== entry))
+                            }
+                          >
+                            <X className="h-4 w-4" aria-hidden />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
             </div>
-          </form>
+          </div>
 
           <div className="space-y-2 border-t pt-4">
             <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
