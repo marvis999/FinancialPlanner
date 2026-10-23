@@ -14,7 +14,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build:demo
 
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+FROM nginxinc/nginx-unprivileged:stable-alpine
 # One worker is plenty for a handful of static files and keeps the footprint
 # at a few MB; "auto" would start one per host core.
 RUN sed -i 's/^worker_processes.*/worker_processes 1;/' /etc/nginx/nginx.conf
