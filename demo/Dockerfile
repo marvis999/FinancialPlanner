@@ -19,7 +19,7 @@ FROM nginxinc/nginx-unprivileged:stable-alpine
 # at a few MB; "auto" would start one per host core.
 RUN sed -i 's/^worker_processes.*/worker_processes 1;/' /etc/nginx/nginx.conf
 # The only origin allowed to frame the demo. Space-separated for several.
-ENV FRAME_ANCESTORS="https://marvin.ruhr"
+ENV FRAME_ANCESTORS="https://marvinlorenz.de"
 COPY demo/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/demo/out /usr/share/nginx/html
 EXPOSE 8080

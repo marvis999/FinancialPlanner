@@ -61,7 +61,7 @@ proxy.
 `demo/nginx.conf.template` sets these on every response:
 
 - `Content-Security-Policy` with `frame-ancestors` set to the
-  `FRAME_ANCESTORS` environment variable (default `https://marvin.ruhr`), so
+  `FRAME_ANCESTORS` environment variable (default `https://marvinlorenz.de`), so
   only that site can embed the demo. The policy also allows requests to the
   demo's own origin only.
 - `X-Content-Type-Options: nosniff`
@@ -74,7 +74,7 @@ To allow another embedding origin, for example a local copy of the website,
 pass several origins separated by spaces:
 
 ```bash
-docker run --rm -p 127.0.0.1:8080:8080 -e FRAME_ANCESTORS="https://marvin.ruhr http://localhost:3000" financialplanner-demo
+docker run --rm -p 127.0.0.1:8080:8080 -e FRAME_ANCESTORS="https://marvinlorenz.de http://localhost:3000" financialplanner-demo
 ```
 
 ## What the demo leaves out
